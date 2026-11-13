@@ -32,97 +32,156 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
     semestre
   );
 
-  // Determine semester or trimester label (e.g., S1 -> SEMESTRE 1, T1 -> TRIMESTRE 1)
   const inferredSem =
     semestre || summary.details[0]?.ue.semestre || 'S1';
   const semNumber = inferredSem.replace(/\D/g, '') || '1';
   const isTrim = isTrimesterCode(semestre ?? inferredSem);
   const periodWord = isTrim ? 'Trimestre' : 'Semestre';
-  const docNumber = `${student.matricule.split('-').pop() || '0001'}${inferredSem}`;
+  const docNumber = `${student.matricule.split('-').pop() || '0001'}-${inferredSem}`;
   const dateStr = new Date().toLocaleDateString('fr-FR');
+  const optionLabel =
+    student.option || filiere?.options?.[0] || filiere?.nom || student.filiereCode;
+  const sessionTitle = semestre
+    ? `EXAMEN ${periodWord.toUpperCase()} ${semNumber}`
+    : 'RELEVÉ DE NOTES LMD CONSOLIDÉ';
 
   return (
-    <div className="space-y-5 text-xs text-[#161e2e] bg-white">
-      {/* Top 3-Zone Institutional Header matching official model */}
-      <div className="flex flex-col sm:flex-row print:flex-row items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <img
-            src={CEREC_LOGO_URL}
-            alt="Logo Groupe CEREC-ISCOM"
-            referrerPolicy="no-referrer"
-            className="w-14 h-14 object-contain rounded border border-[#e3e7ef] bg-white p-0.5 shrink-0"
-          />
-          <div>
-            <p className="font-bold text-sm text-[#0b1f3f] tracking-tight uppercase">
-              GROUPE CEREC-ISCOM
+    <div className="space-y-4 text-xs text-[#161e2e] bg-white">
+      {/* Tier 1: Institutional Masthead */}
+      <div className="border-b-2 border-[#0b1f3f] pb-3">
+        <div className="flex flex-col sm:flex-row print:flex-row items-start sm:items-center print:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <img
+              src={CEREC_LOGO_URL}
+              alt="Logo Groupe CEREC-ISCOM"
+              referrerPolicy="no-referrer"
+              className="w-16 h-16 object-contain rounded border border-[#e3e7ef] bg-white p-1 shrink-0"
+            />
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#c58b12]">
+                République du Congo · Enseignement Supérieur LMD
+              </p>
+              <p className="font-serif font-bold text-base sm:text-lg print:text-lg text-[#0b1f3f] tracking-tight leading-tight">
+                GROUPE CEREC-ISCOM
+              </p>
+              <p className="text-[11px] text-slate-600">
+                Institut Supérieur de Commerce &amp; Management · Partenariat ESTAM Bénin
+              </p>
+              <p className="text-[11px] font-medium text-[#0b1f3f]">
+                Campus de {student.campus}
+              </p>
+            </div>
+          </div>
+
+          <div className="w-full sm:w-auto print:w-auto sm:text-right print:text-right bg-[#f8f9fb] border border-[#e3e7ef] rounded-md px-3.5 py-2.5 shrink-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Document Académique Officiel
             </p>
-            <p className="text-[11px] text-slate-600">
-              {student.campus} · République du Congo
+            <h4 className="font-serif text-base sm:text-lg print:text-lg font-bold text-[#0b1f3f] leading-tight mt-0.5">
+              Relevé de notes
+            </h4>
+            <p className="font-mono text-xs font-bold text-[#c58b12] mt-1 tabular-nums">
+              Réf. N° {docNumber}
             </p>
           </div>
         </div>
+        <div className="h-0.5 bg-[#e0a526] mt-2.5 w-full" />
+      </div>
 
-        <div className="sm:text-center print:text-center pt-1">
-          <h4 className="text-lg font-bold text-[#161e2e] leading-tight">
-            Relevé de notes
-          </h4>
-          <p className="font-mono text-xs font-semibold text-[#0b1f3f] mt-1">
-            N° {docNumber}
-          </p>
-        </div>
+      {/* Tier 2: Structured Student Identification Card + Framed Photo */}
+      <div className="border border-[#e3e7ef] bg-[#f8f9fb] rounded-md p-3.5 sm:p-4 print:p-3.5">
+        <div className="flex flex-col-reverse sm:flex-row print:flex-row items-start justify-between gap-4">
+          <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                Matricule Étudiant
+              </span>
+              <span className="font-mono font-bold text-[#0b1f3f] text-sm">
+                {student.matricule}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                Année Académique
+              </span>
+              <span className="font-mono font-bold text-[#161e2e] text-sm">
+                {student.anneeAcademique}
+              </span>
+            </div>
 
-        <div className="w-24 h-28 border border-slate-400 flex items-center justify-center shrink-0 bg-slate-50/40 overflow-hidden">
-          {student.photoUrl ? (
-            <img
-              src={student.photoUrl}
-              alt={`${student.nom} ${student.prenom}`}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider">
-              Photo
-            </span>
-          )}
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                Nom &amp; Prénoms
+              </span>
+              <span className="font-bold text-[#161e2e] text-sm">
+                {student.nom} {student.prenom}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                Date &amp; Lieu de Naissance
+              </span>
+              <span className="font-medium text-[#161e2e]">
+                {student.dateNaissance} à {student.lieuNaissance}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                Filière de Formation
+              </span>
+              <span className="font-bold text-[#161e2e]">
+                {filiere?.nom ?? student.filiereCode}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                Cycle &amp; Niveau
+              </span>
+              <span className="font-bold text-[#161e2e]">
+                {filiere?.cycle ?? 'Licence'} · {student.niveau}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                Option / Spécialité
+              </span>
+              <span className="font-bold text-[#0b1f3f]">{optionLabel}</span>
+            </div>
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">
+                Campus d’Attache
+              </span>
+              <span className="font-semibold text-[#161e2e]">{student.campus}</span>
+            </div>
+          </div>
+
+          <div className="w-24 h-28 border border-slate-300 rounded bg-white flex items-center justify-center shrink-0 overflow-hidden self-center sm:self-start print:self-start">
+            {student.photoUrl ? (
+              <img
+                src={student.photoUrl}
+                alt={`${student.nom} ${student.prenom}`}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider text-center px-1">
+                Photo d’identité
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Student Identification Block */}
-      <div className="grid grid-cols-1 sm:grid-cols-[150px_1fr] print:grid-cols-[150px_1fr] gap-y-1.5 text-xs max-w-lg sm:-mt-4 print:-mt-4">
-        <span className="text-slate-600">Étudiant :</span>
-        <span className="font-mono font-bold text-[#0b1f3f]">{student.matricule}</span>
-
-        <span className="text-slate-600">Nom :</span>
-        <span className="font-bold text-[#161e2e]">
-          {student.nom} {student.prenom}
-        </span>
-
-        <span className="text-slate-600">Filière :</span>
-        <span className="font-bold text-[#161e2e]">
-          {filiere?.nom ?? student.filiereCode}
-        </span>
-
-        <span className="text-slate-600">Option :</span>
-        <span className="font-bold text-[#0b1f3f]">
-          {student.option || filiere?.options?.[0] || filiere?.nom || student.filiereCode}
-        </span>
-
-        <span className="text-slate-600">Cycle :</span>
-        <span className="font-bold text-[#161e2e]">{filiere?.cycle ?? 'Licence'}</span>
-
-        <span className="text-slate-600">Niveau :</span>
-        <span className="font-bold text-[#161e2e]">{student.niveau}</span>
-
-        <span className="text-slate-600">Année académique :</span>
-        <span className="font-bold font-mono text-[#161e2e]">
-          {student.anneeAcademique}
-        </span>
-      </div>
-
-      {/* Session Title */}
-      <div className="pt-1">
-        <h5 className="text-sm font-bold uppercase tracking-wide text-[#0b1f3f]">
-          EXAMEN {periodWord.toUpperCase()} {semNumber}
+      {/* Tier 3: Academic Session Banner */}
+      <div className="bg-[#0b1f3f] text-white px-3.5 py-2 rounded-md flex flex-wrap items-center justify-between gap-2">
+        <h5 className="text-xs sm:text-sm print:text-xs font-bold uppercase tracking-wider text-white">
+          {sessionTitle}
         </h5>
+        <span className="font-mono text-[11px] text-[#eab33a] font-semibold tabular-nums">
+          Crédits évalués : {summary.creditsTotaux} ECTS · Seuil LMD :{' '}
+          {state.settings.seuilValidation}/20
+        </span>
       </div>
 
       {/* UE Grouped Grade Tables */}

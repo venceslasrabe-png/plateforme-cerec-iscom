@@ -77,104 +77,198 @@ async function renderBulletinPage(
   const semNumber = inferredSem.replace(/\D/g, '') || '1';
   const isTrim = isTrimesterCode(semestre ?? inferredSem);
   const periodWord = isTrim ? 'Trimestre' : 'Semestre';
-  const docNumber = `${student.matricule.split('-').pop() || '0001'}${inferredSem}`;
+  const docNumber = `${student.matricule.split('-').pop() || '0001'}-${inferredSem}`;
   const dateStr = new Date().toLocaleDateString('fr-FR');
+  const optionLabel =
+    student.option || filiere?.options?.[0] || filiere?.nom || student.filiereCode;
 
-  // Top 3-zone header
-  let y = 14;
+  // Tier 1: Institutional Masthead
+  let y = 12;
 
   if (logoDataUrl) {
-    doc.addImage(logoDataUrl, 'PNG', marginX, y, 16, 16);
+    doc.addImage(logoDataUrl, 'PNG', marginX, y, 17, 17);
   } else {
     doc.setDrawColor(11, 31, 63);
-    doc.rect(marginX, y, 16, 16);
+    doc.rect(marginX, y, 17, 17);
   }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
+  doc.setFontSize(7.5);
+  doc.setTextColor(197, 139, 18);
+  doc.text(
+    pdfText('RÉPUBLIQUE DU CONGO · ENSEIGNEMENT SUPÉRIEUR LMD'),
+    marginX + 20,
+    y + 3.5
+  );
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
   doc.setTextColor(11, 31, 63);
-  doc.text('GROUPE CEREC-ISCOM', marginX + 19, y + 6);
+  doc.text('GROUPE CEREC-ISCOM', marginX + 20, y + 8.5);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(71, 85, 105);
-  doc.text(pdfText(`${student.campus} · République du Congo`), marginX + 19, y + 11);
-  doc.text(pdfText('Partenariat ESTAM Bénin · Système LMD'), marginX + 19, y + 15.5);
-
-  // Center Title
+  doc.text(
+    pdfText('Institut Supérieur de Commerce & Management · Partenariat ESTAM Bénin'),
+    marginX + 20,
+    y + 13
+  );
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.setTextColor(22, 30, 46);
-  doc.text(pdfText('Relevé de notes'), pageWidth / 2, y + 7, { align: 'center' });
+  doc.setTextColor(11, 31, 63);
+  doc.text(pdfText(`Campus de ${student.campus}`), marginX + 20, y + 17);
+
+  // Top-right Document Title Box
+  const titleBoxW = 54;
+  const titleBoxH = 18;
+  const titleBoxX = pageWidth - marginX - titleBoxW;
+  doc.setFillColor(248, 249, 251);
+  doc.setDrawColor(227, 231, 239);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(titleBoxX, y, titleBoxW, titleBoxH, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.8);
+  doc.setTextColor(100, 116, 139);
+  doc.text('DOCUMENT OFFICIEL', titleBoxX + titleBoxW - 3, y + 4.5, { align: 'right' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12.5);
+  doc.setTextColor(11, 31, 63);
+  doc.text(pdfText('Relevé de notes'), titleBoxX + titleBoxW - 3, y + 10.5, {
+    align: 'right',
+  });
 
   doc.setFont('courier', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(11, 31, 63);
-  doc.text(`N° ${docNumber}`, pageWidth / 2, y + 13, { align: 'center' });
+  doc.setFontSize(8.5);
+  doc.setTextColor(197, 139, 18);
+  doc.text(pdfText(`Réf. N° ${docNumber}`), titleBoxX + titleBoxW - 3, y + 15.5, {
+    align: 'right',
+  });
 
-  // Top-right photo box
-  const photoW = 24;
-  const photoH = 28;
-  const photoX = pageWidth - marginX - photoW;
-  doc.setDrawColor(148, 163, 184);
+  // Navy + Gold masthead divider rules
+  y += 21;
+  doc.setDrawColor(11, 31, 63);
+  doc.setLineWidth(0.7);
+  doc.line(marginX, y, pageWidth - marginX, y);
+  doc.setDrawColor(224, 165, 38);
+  doc.setLineWidth(0.45);
+  doc.line(marginX, y + 1.2, pageWidth - marginX, y + 1.2);
+
+  // Tier 2: Structured Student Identification Card + Framed Photo
+  y += 4;
+  const cardTop = y;
+  const cardHeight = 33;
+  doc.setFillColor(248, 249, 251);
+  doc.setDrawColor(227, 231, 239);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(marginX, cardTop, contentWidth, cardHeight, 1.5, 1.5, 'FD');
+
+  const photoW = 22;
+  const photoH = 26;
+  const photoX = pageWidth - marginX - photoW - 3.5;
+  const photoY = cardTop + 3.5;
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.35);
-  doc.rect(photoX, y, photoW, photoH);
+  doc.rect(photoX, photoY, photoW, photoH, 'FD');
+
   const photoDataUrl = student.photoUrl
     ? await loadImageAsPngDataUrl(student.photoUrl)
     : null;
   if (photoDataUrl) {
-    doc.addImage(photoDataUrl, 'PNG', photoX + 0.5, y + 0.5, photoW - 1, photoH - 1);
+    doc.addImage(photoDataUrl, 'PNG', photoX + 0.5, photoY + 0.5, photoW - 1, photoH - 1);
   } else {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.setTextColor(148, 163, 184);
-    doc.text('PHOTO', photoX + photoW / 2, y + photoH / 2 + 1, { align: 'center' });
+    doc.text('PHOTO', photoX + photoW / 2, photoY + photoH / 2 + 1, { align: 'center' });
   }
 
-  // Student Identification Block
-  y += 22;
-  const infoRows: [string, string, boolean][] = [
-    ['Étudiant :', student.matricule, true],
-    ['Nom :', `${student.nom} ${student.prenom}`, false],
-    ['Filière :', filiere?.nom ?? student.filiereCode, false],
-    [
-      'Option :',
-      student.option || filiere?.options?.[0] || filiere?.nom || student.filiereCode,
-      false,
-    ],
-    ['Cycle :', filiere?.cycle ?? 'Licence', false],
-    ['Niveau :', student.niveau, false],
-    ['Année académique :', student.anneeAcademique, true],
-  ];
+  const col1X = marginX + 4;
+  const col2X = marginX + 86;
+  const col1MaxW = 78;
+  const col2MaxW = 62;
 
-  infoRows.forEach(([label, val, mono]) => {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(71, 85, 105);
-    doc.text(pdfText(label), marginX, y);
+  const drawField = (
+    x: number,
+    fy: number,
+    label: string,
+    val: string,
+    maxW: number,
+    mono = false,
+    accentNavy = false
+  ) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(pdfText(label.toUpperCase()), x, fy);
 
     doc.setFont(mono ? 'courier' : 'helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(11, 31, 63);
-    doc.text(pdfText(val), marginX + 36, y);
-    y += 5;
-  });
+    doc.setFontSize(8.5);
+    if (accentNavy) {
+      doc.setTextColor(11, 31, 63);
+    } else {
+      doc.setTextColor(22, 30, 46);
+    }
+    const clipped = doc.splitTextToSize(pdfText(val), maxW)[0] ?? '';
+    doc.text(clipped, x, fy + 3.6);
+  };
 
-  // Session Banner
-  y += 3;
-  doc.setDrawColor(11, 31, 63);
-  doc.setLineWidth(0.5);
-  doc.line(marginX, y, pageWidth - marginX, y);
-  y += 5.5;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.setTextColor(11, 31, 63);
-  doc.text(
-    semestre ? `EXAMEN ${periodWord.toUpperCase()} ${semNumber}` : 'RELEVÉ LMD CONSOLIDÉ',
-    marginX,
-    y
+  let rowY = cardTop + 5.5;
+  drawField(col1X, rowY, 'Matricule Étudiant', student.matricule, col1MaxW, true, true);
+  drawField(col2X, rowY, 'Année Académique', student.anneeAcademique, col2MaxW, true, false);
+
+  rowY += 7.5;
+  drawField(col1X, rowY, 'Nom & Prénoms', `${student.nom} ${student.prenom}`, col1MaxW);
+  drawField(
+    col2X,
+    rowY,
+    'Né(e) le',
+    `${student.dateNaissance} à ${student.lieuNaissance}`,
+    col2MaxW
   );
-  y += 4;
+
+  rowY += 7.5;
+  drawField(col1X, rowY, 'Filière de Formation', filiere?.nom ?? student.filiereCode, col1MaxW);
+  drawField(
+    col2X,
+    rowY,
+    'Cycle & Niveau',
+    `${filiere?.cycle ?? 'Licence'} · ${student.niveau}`,
+    col2MaxW
+  );
+
+  rowY += 7.5;
+  drawField(col1X, rowY, 'Option / Spécialité', optionLabel, col1MaxW, false, true);
+  drawField(col2X, rowY, 'Campus', student.campus, col2MaxW);
+
+  // Tier 3: Session Banner
+  y = cardTop + cardHeight + 3.5;
+  doc.setFillColor(11, 31, 63);
+  doc.roundedRect(marginX, y, contentWidth, 7.5, 1.2, 1.2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text(
+    pdfText(
+      semestre ? `EXAMEN ${periodWord.toUpperCase()} ${semNumber}` : 'RELEVÉ DE NOTES LMD CONSOLIDÉ'
+    ),
+    marginX + 3.5,
+    y + 5
+  );
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(234, 179, 58);
+  doc.text(
+    pdfText(`Crédits : ${summary.creditsTotaux} ECTS · Seuil : ${state.settings.seuilValidation}/20`),
+    pageWidth - marginX - 3.5,
+    y + 5,
+    { align: 'right' }
+  );
+
+  y += 10.5;
 
   // UE Groups Tables
   const getLastY = () =>
