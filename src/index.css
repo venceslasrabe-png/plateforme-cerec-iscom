@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Fraunces", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  --cerec-navy-950: #07142b;
+  --cerec-navy-900: #0b1f3f;
+  --cerec-navy-800: #0e2447;
+  --cerec-navy-700: #143263;
+  --cerec-navy-600: #1a3e78;
+  --cerec-gold-600: #c58b12;
+  --cerec-gold-500: #e0a526;
+  --cerec-gold-400: #eab33a;
+  --cerec-gold-100: #fff4d6;
+  --cerec-canvas: #f8f9fb;
+  --cerec-border: #e3e7ef;
+  --cerec-ink: #161e2e;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--cerec-canvas);
+  color: var(--cerec-ink);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #161e2e !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body > *:not(#cerec-print-portal) {
+    display: none !important;
+  }
+
+  #cerec-print-portal,
+  #cerec-print-modal-card,
+  #cerec-print-scroll {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+  }
+
+  #cerec-print-sheet {
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    color: #161e2e !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+}

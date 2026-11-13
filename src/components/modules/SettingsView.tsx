@@ -1,0 +1,665 @@
+import {
+  AlertCircle,
+  Archive,
+  CalendarPlus,
+  CheckCircle2,
+  Download,
+  RotateCcw,
+  Shield,
+  Sliders,
+  Upload,
+  X,
+} from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { CerecState, LmdSettings, UserRole } from '../../types/cerec';
+import {
+  ArchiveImportResult,
+  computeAcademicYearStats,
+  exportCerecToExcel,
+  formatFCFA,
+  getAvailableAcademicYears,
+  importArchivesFromFile,
+} from '../../utils/lmd';
+
+interface SettingsViewProps {
+  state: CerecState;
+  activeRole: UserRole;
+  onChangeRole: (role: UserRole) => void;
+  onUpdateSettings: (settings: LmdSettings) => void;
+  onImportState: (nextState: CerecState) => void;
+  onOpenCreateYear: () => void;
+  onActivateYear: (year: string) => void;
+  onResetDemo: () => void;
+  onNotify: (msg: string) => void;
+}
+
+const ROLES: { id: UserRole; label: string; scope: string }[] = [
+  {
+    id: 'admin',
+    label: 'Administrateur Général',
+    scope: 'Accès complet : pilotage exécutif, LMD, caisse, guérite et paramètres.',
+  },
+  {
+    id: 'direction',
+    label: 'Direction Académique',
+    scope: 'Maquettes LMD, emplois du temps, notes, jurys et corps professoral.',
+  },
+  {
+    id: 'scolarite',
+    label: 'Scolarité & Examens',
+    scope: 'Inscriptions, cartes PVC, feuilles de présences, relevés et PV.',
+  },
+  {
+    id: 'caisse',
+    label: 'Caisse & Comptabilité',
+    scope: 'Encaissements FCFA, suivi des tranches, reçus officiels et relances.',
+  },
+  {
+    id: 'enseignant',
+    label: 'Corps Enseignant',
+    scope: 'Emploi du temps, appel numérique en salle et saisie des notes CC/Examen.',
+  },
+  {
+    id: 'surveillance',
+    label: 'Surveillance & Guérite',
+    scope: 'Contrôle des badges QR au portail, registre visiteurs et alertes.',
+  },
+];
+
+export function SettingsView({
+  state,
+  activeRole,
+  onChangeRole,
+  onUpdateSettings,
+  onImportState,
+  onOpenCreateYear,
+  onActivateYear,
+  onResetDemo,
+  onNotify,
+}: SettingsViewProps) {
+  const [form, setForm] = useState<LmdSettings>({ ...state.settings });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<ArchiveImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [lastImportSummary, setLastImportSummary] = useState<string | null>(null);
+
+  useEffect(() => {
+    setForm({ ...state.settings });
+  }, [state.settings]);
+
+  const allYears = getAvailableAcademicYears(state);
+  const priorYears = allYears.filter((y) => y !== state.settings.anneeAcademique);
+  const [selectedArchiveYear, setSelectedArchiveYear] = useState(
+    priorYears[priorYears.length - 1] ?? allYears[0] ?? state.settings.anneeAcademique
+  );
+
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateSettings(form);
+    onNotify('Paramètres LMD et seuils campus enregistrés.');
+  };
+
+  const handleTriggerImport = () => {
+    setImportError(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleArchiveFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setImporting(true);
+    setImportError(null);
+    setLastImportSummary(null);
+    try {
+      const result = await importArchivesFromFile(file, state);
+      setImportPreview(result);
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Impossible de lire le fichier d'archive sélectionné.";
+      setImportError(message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleConfirmImport = () => {
+    if (!importPreview) return;
+    onImportState(importPreview.nextState);
+    const yearsLabel =
+      importPreview.yearsImported.length > 0
+        ? importPreview.yearsImported.join(', ')
+        : 'Archives';
+    const summary = `${importPreview.fileName} (${yearsLabel}) : ${importPreview.studentsAdded} inscrit(s) ajouté(s), ${importPreview.studentsUpdated} mis à jour, ${importPreview.gradesAdded} note(s), ${importPreview.paymentsAdded} reçu(s) FCFA, ${importPreview.uesAdded} UE(s).`;
+    setLastImportSummary(summary);
+    setImportPreview(null);
+    onNotify(`Archives importées avec succès (${yearsLabel}).`);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Role & Access Profiles */}
+      <div className="bg-white border border-[#e3e7ef] rounded-lg p-5 space-y-4">
+        <div className="flex items-center gap-2 pb-3 border-b border-[#e3e7ef]">
+          <Shield className="w-4 h-4 text-[#0b1f3f]" />
+          <div>
+            <h3 className="text-sm font-semibold text-[#161e2e]">
+              Profils d’accès & Rôles fonctionnels
+            </h3>
+            <p className="text-xs text-slate-500">
+              Basculez instantanément entre les espaces métiers de CEREC-ISCOM.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {ROLES.map((r) => {
+            const active = activeRole === r.id;
+            return (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => {
+                  onChangeRole(r.id);
+                  onNotify(`Profil activé : ${r.label}`);
+                }}
+                className={`text-left p-4 rounded-lg border transition-colors cursor-pointer ${
+                  active
+                    ? 'bg-[#0b1f3f] text-white border-[#0b1f3f]'
+                    : 'bg-white text-[#161e2e] border-[#e3e7ef] hover:border-[#0b1f3f]'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold">{r.label}</span>
+                  {active && (
+                    <span className="text-[11px] font-semibold text-[#eab33a]">Actif</span>
+                  )}
+                </div>
+                <p
+                  className={`text-xs mt-1.5 leading-relaxed ${
+                    active ? 'text-slate-300' : 'text-slate-500'
+                  }`}
+                >
+                  {r.scope}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* LMD Parameters & Data Tools */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <form
+          onSubmit={handleSaveSettings}
+          className="lg:col-span-7 bg-white border border-[#e3e7ef] rounded-lg p-5 space-y-4"
+        >
+          <div className="flex items-center gap-2 pb-3 border-b border-[#e3e7ef]">
+            <Sliders className="w-4 h-4 text-[#c58b12]" />
+            <h3 className="text-sm font-semibold text-[#161e2e]">
+              Règles Académiques LMD & Seuils de Contrôle
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Année académique en cours
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={form.anneeAcademique}
+                  onChange={(e) => setForm({ ...form, anneeAcademique: e.target.value })}
+                  className="flex-1 px-3 py-2 text-sm font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-white"
+                >
+                  {allYears.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={onOpenCreateYear}
+                  title="Créer une nouvelle année académique"
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
+                >
+                  <CalendarPlus className="w-3.5 h-3.5" />
+                  Nouvelle
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Seuil de validation UE (/20)
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                min={8}
+                max={14}
+                value={form.seuilValidation}
+                onChange={(e) => setForm({ ...form, seuilValidation: Number(e.target.value) })}
+                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Pondération Contrôle Continu (0–1)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                min={0.1}
+                max={0.9}
+                value={form.poidsCC}
+                onChange={(e) => {
+                  const cc = Number(e.target.value);
+                  setForm({ ...form, poidsCC: cc, poidsExamen: Number((1 - cc).toFixed(2)) });
+                }}
+                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Pondération Examen (auto)
+              </label>
+              <input
+                type="number"
+                readOnly
+                value={form.poidsExamen}
+                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg bg-slate-50 text-slate-600"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Seuil d’alerte absences répétées
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={form.seuilAbsencesAlerte}
+                onChange={(e) =>
+                  setForm({ ...form, seuilAbsencesAlerte: Number(e.target.value) })
+                }
+                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Seuil recouvrement Guérite (%)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={form.seuilBlocagePortailPct}
+                onChange={(e) =>
+                  setForm({ ...form, seuilBlocagePortailPct: Number(e.target.value) })
+                }
+                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
+              />
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-[#e3e7ef] flex justify-end">
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer"
+            >
+              Enregistrer les paramètres
+            </button>
+          </div>
+        </form>
+
+        {/* Export & Reset */}
+        <div className="lg:col-span-5 bg-white border border-[#e3e7ef] rounded-lg p-5 space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-[#e3e7ef]">
+            <Archive className="w-4 h-4 text-[#0b1f3f]" />
+            <h3 className="text-sm font-semibold text-[#161e2e]">
+              Exportation & Maintenance des données
+            </h3>
+          </div>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Générez un classeur Excel multi-onglets classé par année académique (Synthèse,
+            Étudiants, Notes, Caisse FCFA et Maquettes LMD).
+          </p>
+          <div className="space-y-3 pt-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleArchiveFileChange}
+              className="hidden"
+              aria-label="Sélectionner un fichier d'archives des années antérieures"
+            />
+
+            <button
+              type="button"
+              disabled={importing}
+              onClick={handleTriggerImport}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+            >
+              <Upload className="w-4 h-4 text-[#eab33a]" />
+              {importing
+                ? 'Analyse du fichier en cours…'
+                : 'Importer des archives (.xlsx / .csv)'}
+            </button>
+
+            {importError && (
+              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="flex-1 leading-relaxed">{importError}</span>
+                <button
+                  type="button"
+                  onClick={() => setImportError(null)}
+                  aria-label="Fermer l'alerte d'importation"
+                  className="text-red-500 hover:text-red-700 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {lastImportSummary && (
+              <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="flex-1 leading-relaxed">{lastImportSummary}</span>
+                <button
+                  type="button"
+                  onClick={() => setLastImportSummary(null)}
+                  aria-label="Fermer la confirmation d'importation"
+                  className="text-emerald-600 hover:text-emerald-800 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            <button
+              type="button"
+              disabled={priorYears.length === 0}
+              onClick={() => {
+                exportCerecToExcel(state, { scope: 'prior' });
+                onNotify(
+                  `Archive des années antérieures (${priorYears.join(', ')}) exportée (.xlsx).`
+                );
+              }}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] disabled:opacity-50 text-[#07142b] text-xs font-bold cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              Exporter les années antérieures ({priorYears.length}) (.xlsx)
+            </button>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedArchiveYear}
+                onChange={(e) => setSelectedArchiveYear(e.target.value)}
+                aria-label="Choisir une année académique à exporter"
+                className="flex-1 px-3 py-2 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+              >
+                {allYears.map((y) => (
+                  <option key={y} value={y}>
+                    {y} {y === state.settings.anneeAcademique ? '(En cours)' : '(Antérieure)'}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  exportCerecToExcel(state, { scope: 'single', targetYear: selectedArchiveYear });
+                  onNotify(`Archive ${selectedArchiveYear} exportée (.xlsx).`);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+              >
+                <Download className="w-3.5 h-3.5 text-[#eab33a]" />
+                Exporter l’année
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                exportCerecToExcel(state, { scope: 'all' });
+                onNotify('Export complet classé par année académique généré (.xlsx).');
+              }}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-[#0b1f3f] hover:bg-slate-50 text-[#0b1f3f] text-xs font-semibold cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              Exporter toutes les années classées (.xlsx)
+            </button>
+
+            <button
+              type="button"
+              onClick={onResetDemo}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-700 text-xs font-semibold cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Réinitialiser les données de démonstration
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Archives Table Grouped by Academic Year */}
+      <div className="bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-[#e3e7ef] bg-[#f8f9fb] flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-[#161e2e]">
+              Données classées par Année Académique ({allYears.length} exercice(s))
+            </h3>
+            <p className="text-xs text-slate-500">
+              Aperçu consolidé des archives antérieures et de l’année en cours (import & export Excel)
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onOpenCreateYear}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
+            >
+              <CalendarPlus className="w-3.5 h-3.5" />
+              Nouvelle année académique
+            </button>
+            <button
+              type="button"
+              disabled={importing}
+              onClick={handleTriggerImport}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b1f3f] bg-white hover:bg-slate-50 disabled:opacity-50 text-[#0b1f3f] text-xs font-semibold cursor-pointer whitespace-nowrap"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Importer archives
+            </button>
+            {priorYears.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  exportCerecToExcel(state, { scope: 'prior' });
+                  onNotify('Export des années antérieures téléchargé (.xlsx).');
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+              >
+                <Download className="w-3.5 h-3.5 text-[#eab33a]" />
+                Tout exporter (Années antérieures)
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-[#e3e7ef] text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <th className="py-3 px-4">Année académique</th>
+                <th className="py-3 px-4">Statut</th>
+                <th className="py-3 px-4 text-right">Étudiants</th>
+                <th className="py-3 px-4 text-right">Moy. LMD</th>
+                <th className="py-3 px-4 text-right">Réussite</th>
+                <th className="py-3 px-4 text-right">Encaissé (FCFA)</th>
+                <th className="py-3 px-4 text-right">Recouvrement</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e3e7ef]">
+              {allYears.map((y) => {
+                const st = computeAcademicYearStats(state, y);
+                const isCurrent = y === state.settings.anneeAcademique;
+                return (
+                  <tr key={y} className="hover:bg-slate-50/70">
+                    <td className="py-3 px-4 font-mono font-bold text-[#0b1f3f]">{y}</td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                          isCurrent
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {isCurrent ? 'Année en cours' : 'Archive / Exercice'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono tabular-nums">
+                      {st.studentCount}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono tabular-nums">
+                      {st.moyenneGenerale !== null ? `${st.moyenneGenerale.toFixed(2)} / 20` : '—'}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono tabular-nums">
+                      {st.tauxReussite}%
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-semibold text-[#161e2e] tabular-nums">
+                      {formatFCFA(st.totalEncaisseCaisse)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono tabular-nums">
+                      {st.tauxRecouvrement}%
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="inline-flex items-center justify-end gap-2">
+                        {!isCurrent && (
+                          <button
+                            type="button"
+                            onClick={() => onActivateYear(y)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-[#e0a526] bg-[#e0a526]/15 hover:bg-[#e0a526]/30 text-xs font-semibold text-[#07142b] cursor-pointer whitespace-nowrap"
+                          >
+                            Activer
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            exportCerecToExcel(state, { scope: 'single', targetYear: y });
+                            onNotify(`Export Excel ${y} téléchargé.`);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-semibold text-[#0b1f3f] cursor-pointer whitespace-nowrap"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Exporter {y}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* In-App Confirmation Modal for Archive Import */}
+      {importPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4">
+          <div className="bg-white border border-[#e3e7ef] rounded-xl max-w-lg w-full p-6 space-y-4 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-[#161e2e]">
+                  Confirmer l’importation des archives
+                </h3>
+                <p className="text-xs text-slate-500 font-mono mt-0.5 break-all">
+                  {importPreview.fileName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImportPreview(null)}
+                aria-label="Fermer la fenêtre d'importation"
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="rounded-lg bg-[#f8f9fb] border border-[#e3e7ef] p-4 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">Années académiques détectées</span>
+                <span className="font-mono font-bold text-[#0b1f3f]">
+                  {importPreview.yearsImported.length > 0
+                    ? importPreview.yearsImported.join(', ')
+                    : 'Non spécifiée'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#e3e7ef]">
+                <div className="flex items-center justify-between bg-white px-3 py-2 rounded border border-[#e3e7ef]">
+                  <span className="text-slate-600">Nouveaux étudiants</span>
+                  <span className="font-mono font-bold text-[#0b1f3f]">
+                    +{importPreview.studentsAdded}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between bg-white px-3 py-2 rounded border border-[#e3e7ef]">
+                  <span className="text-slate-600">Étudiants mis à jour</span>
+                  <span className="font-mono font-bold text-[#0b1f3f]">
+                    {importPreview.studentsUpdated}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between bg-white px-3 py-2 rounded border border-[#e3e7ef]">
+                  <span className="text-slate-600">Notes importées</span>
+                  <span className="font-mono font-bold text-[#0b1f3f]">
+                    +{importPreview.gradesAdded}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between bg-white px-3 py-2 rounded border border-[#e3e7ef]">
+                  <span className="text-slate-600">Reçus caisse FCFA</span>
+                  <span className="font-mono font-bold text-[#0b1f3f]">
+                    +{importPreview.paymentsAdded}
+                  </span>
+                </div>
+                <div className="col-span-2 flex items-center justify-between bg-white px-3 py-2 rounded border border-[#e3e7ef]">
+                  <span className="text-slate-600">Nouvelles UE ajoutées à la maquette</span>
+                  <span className="font-mono font-bold text-[#0b1f3f]">
+                    +{importPreview.uesAdded}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Les doublons (même code UE, même numéro de reçu ou même couple matricule / année
+              académique) sont automatiquement dédupliqués sans écraser l’année en cours.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setImportPreview(null)}
+                className="px-4 py-2 rounded-lg border border-[#e3e7ef] text-xs font-semibold text-slate-700 cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmImport}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5 text-[#eab33a]" />
+                Confirmer l’importation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

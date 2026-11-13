@@ -1,0 +1,6 @@
+{
+  "name": "CEREC-ISCOM — Gestion Académique LMD",
+  "description": "Plateforme unifiée de gestion académique LMD, scolarité, caisse, présences et contrôle d'accès du Groupe CEREC-ISCOM (Pointe-Noire & Brazzaville).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
