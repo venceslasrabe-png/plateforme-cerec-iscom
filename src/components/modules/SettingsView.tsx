@@ -4,7 +4,11 @@ import {
   CalendarPlus,
   CalendarRange,
   CheckCircle2,
+  Copy,
   Download,
+  Eye,
+  EyeOff,
+  KeyRound,
   RotateCcw,
   Shield,
   Sliders,
@@ -21,10 +25,15 @@ import {
   getAvailableAcademicYears,
   importArchivesFromFile,
 } from '../../utils/lmd';
+import { COMPARTMENT_ACCOUNTS, ORDERED_ROLES } from '../../utils/permissions';
 
 interface SettingsViewProps {
   state: CerecState;
   activeRole: UserRole;
+  canSwitchRoles?: boolean;
+  canManageSettings?: boolean;
+  canCreateAcademicYear?: boolean;
+  canManageTrimesters?: boolean;
   onChangeRole: (role: UserRole) => void;
   onUpdateSettings: (settings: LmdSettings) => void;
   onImportState: (nextState: CerecState) => void;
@@ -36,42 +45,13 @@ interface SettingsViewProps {
   onNotify: (msg: string) => void;
 }
 
-const ROLES: { id: UserRole; label: string; scope: string }[] = [
-  {
-    id: 'admin',
-    label: 'Administrateur Général',
-    scope: 'Accès complet : pilotage exécutif, LMD, caisse, guérite et paramètres.',
-  },
-  {
-    id: 'direction',
-    label: 'Direction Académique',
-    scope: 'Maquettes LMD, emplois du temps, notes, jurys et corps professoral.',
-  },
-  {
-    id: 'scolarite',
-    label: 'Scolarité & Examens',
-    scope: 'Inscriptions, cartes PVC, feuilles de présences, relevés et PV.',
-  },
-  {
-    id: 'caisse',
-    label: 'Caisse & Comptabilité',
-    scope: 'Encaissements FCFA, suivi des tranches, reçus officiels et relances.',
-  },
-  {
-    id: 'enseignant',
-    label: 'Corps Enseignant',
-    scope: 'Emploi du temps, appel numérique en salle et saisie des notes CC/Examen.',
-  },
-  {
-    id: 'surveillance',
-    label: 'Surveillance & Guérite',
-    scope: 'Contrôle des badges QR au portail, registre visiteurs et alertes.',
-  },
-];
-
 export function SettingsView({
   state,
   activeRole,
+  canSwitchRoles = false,
+  canManageSettings = true,
+  canCreateAcademicYear = true,
+  canManageTrimesters = true,
   onChangeRole,
   onUpdateSettings,
   onImportState,
@@ -88,6 +68,8 @@ export function SettingsView({
   const [importPreview, setImportPreview] = useState<ArchiveImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [lastImportSummary, setLastImportSummary] = useState<string | null>(null);
+  const [revealedAccessIds, setRevealedAccessIds] = useState<Record<string, boolean>>({});
+  const [revealAllAccess, setRevealAllAccess] = useState<boolean>(false);
 
   useEffect(() => {
     setForm({ ...state.settings });
@@ -101,16 +83,19 @@ export function SettingsView({
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageSettings) return;
     onUpdateSettings(form);
     onNotify('Paramètres LMD et seuils campus enregistrés.');
   };
 
   const handleTriggerImport = () => {
+    if (!canManageSettings) return;
     setImportError(null);
     fileInputRef.current?.click();
   };
 
   const handleArchiveFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageSettings) return;
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
@@ -133,7 +118,7 @@ export function SettingsView({
   };
 
   const handleConfirmImport = () => {
-    if (!importPreview) return;
+    if (!canManageSettings || !importPreview) return;
     onImportState(importPreview.nextState);
     const yearsLabel =
       importPreview.yearsImported.length > 0
@@ -156,15 +141,48 @@ export function SettingsView({
               Profils d’accès & Rôles fonctionnels
             </h3>
             <p className="text-xs text-slate-500">
-              Basculez instantanément entre les espaces métiers de CEREC-ISCOM.
+              {canSwitchRoles
+                ? 'Basculez instantanément entre les espaces métiers de CEREC-ISCOM.'
+                : 'Cartographie officielle des accès et missions par profil (consultation seule).'}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {ROLES.map((r) => {
+          {ORDERED_ROLES.map((r) => {
             const active = activeRole === r.id;
-            return (
+            const scopeLine = `${r.allowedModules.length} rubrique(s)${
+              r.permissions.readOnly ? ' · Lecture seule' : ''
+            }`;
+            const cardClasses = `text-left p-4 rounded-lg border transition-colors ${
+              active
+                ? 'bg-[#0b1f3f] text-white border-[#0b1f3f]'
+                : canSwitchRoles
+                ? 'bg-white text-[#161e2e] border-[#e3e7ef] hover:border-[#0b1f3f] cursor-pointer'
+                : 'bg-white text-[#161e2e] border-[#e3e7ef]'
+            }`;
+            const content = (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold">{r.label}</span>
+                  <span
+                    className={`text-[11px] font-semibold ${
+                      active ? 'text-[#eab33a]' : 'text-slate-400'
+                    }`}
+                  >
+                    {active ? 'Actif' : scopeLine}
+                  </span>
+                </div>
+                <p
+                  className={`text-xs mt-1.5 leading-relaxed ${
+                    active ? 'text-slate-300' : 'text-slate-500'
+                  }`}
+                >
+                  {r.mission}
+                </p>
+              </>
+            );
+            return canSwitchRoles ? (
               <button
                 key={r.id}
                 type="button"
@@ -172,28 +190,123 @@ export function SettingsView({
                   onChangeRole(r.id);
                   onNotify(`Profil activé : ${r.label}`);
                 }}
-                className={`text-left p-4 rounded-lg border transition-colors cursor-pointer ${
-                  active
-                    ? 'bg-[#0b1f3f] text-white border-[#0b1f3f]'
-                    : 'bg-white text-[#161e2e] border-[#e3e7ef] hover:border-[#0b1f3f]'
-                }`}
+                className={cardClasses}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold">{r.label}</span>
-                  {active && (
-                    <span className="text-[11px] font-semibold text-[#eab33a]">Actif</span>
-                  )}
-                </div>
-                <p
-                  className={`text-xs mt-1.5 leading-relaxed ${
-                    active ? 'text-slate-300' : 'text-slate-500'
-                  }`}
-                >
-                  {r.scope}
-                </p>
+                {content}
               </button>
+            ) : (
+              <div key={r.id} className={cardClasses}>
+                {content}
+              </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Compartment Access Credentials Directory */}
+      <div className="bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-[#e3e7ef] bg-[#f8f9fb] flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-[#c58b12]" />
+            <div>
+              <h3 className="text-sm font-semibold text-[#161e2e]">
+                Identifiants & Accès par compartiment ({COMPARTMENT_ACCOUNTS.length})
+              </h3>
+              <p className="text-xs text-slate-500">
+                Adresse mail et mot de passe attribués à chaque service et campus (Pointe-Noire & Brazzaville)
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRevealAllAccess((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e3e7ef] bg-white hover:border-[#0b1f3f] text-xs font-semibold text-[#0b1f3f] cursor-pointer"
+          >
+            {revealAllAccess ? (
+              <>
+                <EyeOff className="w-3.5 h-3.5" />
+                Masquer les mots de passe
+              </>
+            ) : (
+              <>
+                <Eye className="w-3.5 h-3.5" />
+                Afficher tous les mots de passe
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-[#e3e7ef] text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-white">
+                <th className="py-3 px-4">Compartiment / Service</th>
+                <th className="py-3 px-4">Campus</th>
+                <th className="py-3 px-4">Adresse mail</th>
+                <th className="py-3 px-4">Mot de passe</th>
+                <th className="py-3 px-4">Périmètre d’accès</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#e3e7ef]">
+              {COMPARTMENT_ACCOUNTS.map((acc) => {
+                const isRevealed = revealAllAccess || Boolean(revealedAccessIds[acc.id]);
+                return (
+                  <tr key={acc.id} className="hover:bg-slate-50/70">
+                    <td className="py-2.5 px-4 font-semibold text-[#161e2e]">
+                      {acc.compartment}
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">
+                        {acc.campus}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 font-mono text-[#0b1f3f] font-medium">
+                      {acc.email}
+                    </td>
+                    <td className="py-2.5 px-4 font-mono text-[#161e2e]">
+                      {isRevealed ? acc.password : '••••••••••••'}
+                    </td>
+                    <td className="py-2.5 px-4 text-slate-500">{acc.scopeSummary}</td>
+                    <td className="py-2.5 px-4 text-right">
+                      <div className="inline-flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRevealedAccessIds((prev) => ({
+                              ...prev,
+                              [acc.id]: !isRevealed,
+                            }))
+                          }
+                          title={isRevealed ? 'Masquer' : 'Afficher'}
+                          className="p-1.5 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-slate-600 hover:text-[#0b1f3f] cursor-pointer"
+                        >
+                          {isRevealed ? (
+                            <EyeOff className="w-3.5 h-3.5" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const text = `${acc.compartment}\nMail : ${acc.email}\nMot de passe : ${acc.password}`;
+                            navigator.clipboard?.writeText(text);
+                            onNotify(`Identifiants copiés : ${acc.compartment}`);
+                          }}
+                          title="Copier l'email et le mot de passe"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-[#0b1f3f] font-semibold cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Copier
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -218,8 +331,9 @@ export function SettingsView({
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={form.anneeAcademique}
+                  disabled={!canManageSettings}
                   onChange={(e) => setForm({ ...form, anneeAcademique: e.target.value })}
-                  className="flex-1 min-w-[130px] px-3 py-2 text-sm font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-white"
+                  className="flex-1 min-w-[130px] px-3 py-2 text-sm font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-white disabled:bg-[#f8f9fb] disabled:text-[#161e2e]"
                 >
                   {allYears.map((y) => (
                     <option key={y} value={y}>
@@ -227,15 +341,17 @@ export function SettingsView({
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  onClick={onOpenCreateYear}
-                  title="Créer une nouvelle année académique"
-                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
-                >
-                  <CalendarPlus className="w-3.5 h-3.5" />
-                  Nouvelle
-                </button>
+                {canCreateAcademicYear && (
+                  <button
+                    type="button"
+                    onClick={onOpenCreateYear}
+                    title="Créer une nouvelle année académique"
+                    className="inline-flex items-center gap-1 px-3 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
+                  >
+                    <CalendarPlus className="w-3.5 h-3.5" />
+                    Nouvelle
+                  </button>
+                )}
               </div>
             </div>
             <div>
@@ -244,6 +360,7 @@ export function SettingsView({
               </label>
               <div className="flex flex-wrap items-center gap-2">
                 <select
+                  disabled={!canManageSettings}
                   value={
                     form.trimestreActifId ??
                     (state.trimestres ?? []).find(
@@ -256,7 +373,7 @@ export function SettingsView({
                     setForm({ ...form, trimestreActifId: id || undefined });
                     if (id) onActivateTrimester(id);
                   }}
-                  className="flex-1 min-w-[130px] px-3 py-2 text-sm font-semibold border border-[#e3e7ef] rounded-lg bg-white text-[#0b1f3f]"
+                  className="flex-1 min-w-[130px] px-3 py-2 text-sm font-semibold border border-[#e3e7ef] rounded-lg bg-white text-[#0b1f3f] disabled:bg-[#f8f9fb] disabled:text-[#161e2e]"
                 >
                   {(state.trimestres ?? []).filter(
                     (t) => t.anneeAcademique === form.anneeAcademique
@@ -273,15 +390,17 @@ export function SettingsView({
                       ))
                   )}
                 </select>
-                <button
-                  type="button"
-                  onClick={onOpenCreateTrimester}
-                  title="Créer un trimestre ou générer T1, T2, T3"
-                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-[#0b1f3f] hover:bg-slate-50 text-[#0b1f3f] text-xs font-bold cursor-pointer whitespace-nowrap"
-                >
-                  <CalendarRange className="w-3.5 h-3.5 text-[#c58b12]" />
-                  Créer
-                </button>
+                {canManageTrimesters && (
+                  <button
+                    type="button"
+                    onClick={onOpenCreateTrimester}
+                    title="Créer un trimestre ou générer T1, T2, T3"
+                    className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-[#0b1f3f] hover:bg-slate-50 text-[#0b1f3f] text-xs font-bold cursor-pointer whitespace-nowrap"
+                  >
+                    <CalendarRange className="w-3.5 h-3.5 text-[#c58b12]" />
+                    Créer
+                  </button>
+                )}
               </div>
             </div>
             <div>
@@ -293,9 +412,11 @@ export function SettingsView({
                 step="0.5"
                 min={8}
                 max={14}
+                readOnly={!canManageSettings}
+                disabled={!canManageSettings}
                 value={form.seuilValidation}
                 onChange={(e) => setForm({ ...form, seuilValidation: Number(e.target.value) })}
-                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
+                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg disabled:bg-[#f8f9fb] disabled:text-[#161e2e]"
               />
             </div>
             <div>
@@ -307,12 +428,14 @@ export function SettingsView({
                 step="0.1"
                 min={0.1}
                 max={0.9}
+                readOnly={!canManageSettings}
+                disabled={!canManageSettings}
                 value={form.poidsCC}
                 onChange={(e) => {
                   const cc = Number(e.target.value);
                   setForm({ ...form, poidsCC: cc, poidsExamen: Number((1 - cc).toFixed(2)) });
                 }}
-                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
+                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg disabled:bg-[#f8f9fb] disabled:text-[#161e2e]"
               />
             </div>
             <div>
@@ -334,11 +457,13 @@ export function SettingsView({
                 type="number"
                 min={1}
                 max={10}
+                readOnly={!canManageSettings}
+                disabled={!canManageSettings}
                 value={form.seuilAbsencesAlerte}
                 onChange={(e) =>
                   setForm({ ...form, seuilAbsencesAlerte: Number(e.target.value) })
                 }
-                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
+                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg disabled:bg-[#f8f9fb] disabled:text-[#161e2e]"
               />
             </div>
             <div>
@@ -349,23 +474,27 @@ export function SettingsView({
                 type="number"
                 min={0}
                 max={100}
+                readOnly={!canManageSettings}
+                disabled={!canManageSettings}
                 value={form.seuilBlocagePortailPct}
                 onChange={(e) =>
                   setForm({ ...form, seuilBlocagePortailPct: Number(e.target.value) })
                 }
-                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
+                className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg disabled:bg-[#f8f9fb] disabled:text-[#161e2e]"
               />
             </div>
           </div>
 
-          <div className="pt-3 border-t border-[#e3e7ef] flex justify-end">
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer"
-            >
-              Enregistrer les paramètres
-            </button>
-          </div>
+          {canManageSettings && (
+            <div className="pt-3 border-t border-[#e3e7ef] flex justify-end">
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer"
+              >
+                Enregistrer les paramètres
+              </button>
+            </div>
+          )}
         </form>
 
         {/* Export & Reset */}
@@ -381,26 +510,30 @@ export function SettingsView({
             Étudiants, Notes, Caisse FCFA et Maquettes LMD).
           </p>
           <div className="space-y-3 pt-1">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleArchiveFileChange}
-              className="hidden"
-              aria-label="Sélectionner un fichier d'archives des années antérieures"
-            />
+            {canManageSettings && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleArchiveFileChange}
+                  className="hidden"
+                  aria-label="Sélectionner un fichier d'archives des années antérieures"
+                />
 
-            <button
-              type="button"
-              disabled={importing}
-              onClick={handleTriggerImport}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
-            >
-              <Upload className="w-4 h-4 text-[#eab33a]" />
-              {importing
-                ? 'Analyse du fichier en cours…'
-                : 'Importer des archives (.xlsx / .csv)'}
-            </button>
+                <button
+                  type="button"
+                  disabled={importing}
+                  onClick={handleTriggerImport}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] disabled:opacity-50 text-white text-xs font-bold cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-[#eab33a]" />
+                  {importing
+                    ? 'Analyse du fichier en cours…'
+                    : 'Importer des archives (.xlsx / .csv)'}
+                </button>
+              </>
+            )}
 
             {importError && (
               <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
@@ -485,14 +618,16 @@ export function SettingsView({
               Exporter toutes les années classées (.xlsx)
             </button>
 
-            <button
-              type="button"
-              onClick={onResetDemo}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-700 text-xs font-semibold cursor-pointer"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Réinitialiser les données de démonstration
-            </button>
+            {canManageSettings && (
+              <button
+                type="button"
+                onClick={onResetDemo}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-700 text-xs font-semibold cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Réinitialiser les données de démonstration
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -509,23 +644,27 @@ export function SettingsView({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={onOpenCreateYear}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
-            >
-              <CalendarPlus className="w-3.5 h-3.5" />
-              Nouvelle année académique
-            </button>
-            <button
-              type="button"
-              disabled={importing}
-              onClick={handleTriggerImport}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b1f3f] bg-white hover:bg-slate-50 disabled:opacity-50 text-[#0b1f3f] text-xs font-semibold cursor-pointer whitespace-nowrap"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Importer archives
-            </button>
+            {canCreateAcademicYear && (
+              <button
+                type="button"
+                onClick={onOpenCreateYear}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
+              >
+                <CalendarPlus className="w-3.5 h-3.5" />
+                Nouvelle année académique
+              </button>
+            )}
+            {canManageSettings && (
+              <button
+                type="button"
+                disabled={importing}
+                onClick={handleTriggerImport}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b1f3f] bg-white hover:bg-slate-50 disabled:opacity-50 text-[#0b1f3f] text-xs font-semibold cursor-pointer whitespace-nowrap"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Importer archives
+              </button>
+            )}
             {priorYears.length > 0 && (
               <button
                 type="button"
@@ -590,7 +729,7 @@ export function SettingsView({
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="inline-flex items-center justify-end gap-2">
-                        {!isCurrent && (
+                        {canManageSettings && !isCurrent && (
                           <button
                             type="button"
                             onClick={() => onActivateYear(y)}
@@ -621,7 +760,7 @@ export function SettingsView({
       </div>
 
       {/* In-App Confirmation Modal for Archive Import */}
-      {importPreview && (
+      {canManageSettings && importPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white border border-[#e3e7ef] rounded-xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[92vh] overflow-y-auto my-auto">
             <div className="flex items-start justify-between gap-3">

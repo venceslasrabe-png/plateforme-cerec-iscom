@@ -31,6 +31,7 @@ import { QrCodeSvg } from '../QrCodeSvg';
 interface ExamsViewProps {
   state: CerecState;
   campusFilter: Campus | 'Tous';
+  canDeliberateAndRattrapage?: boolean;
   onUpsertGrade: (grade: GradeRecord) => void;
   onBulkUpsertGrades: (records: GradeRecord[]) => void;
   onNotify: (msg: string) => void;
@@ -39,6 +40,7 @@ interface ExamsViewProps {
 export function ExamsView({
   state,
   campusFilter,
+  canDeliberateAndRattrapage = true,
   onUpsertGrade,
   onBulkUpsertGrades,
   onNotify,
@@ -103,6 +105,7 @@ export function ExamsView({
   const ajourne = allRows.filter((r) => r.summary.decision === 'Ajourné').length;
 
   const openRattrapageModal = (student: Student) => {
+    if (!canDeliberateAndRattrapage) return;
     const summary = computeStudentSemesterSummary(
       student,
       state.ues,
@@ -124,7 +127,7 @@ export function ExamsView({
 
   const handleSaveRattrapage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rattrapageStudent) return;
+    if (!canDeliberateAndRattrapage || !rattrapageStudent) return;
     Object.entries(rattrapageInputs).forEach(([ueId, raw]) => {
       const existing = state.grades.find(
         (g) => g.studentId === rattrapageStudent.id && g.ueId === ueId
@@ -212,44 +215,48 @@ export function ExamsView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              e.target.value = '';
-              if (!file) return;
-              setImporting(true);
-              setImportError(null);
-              try {
-                const res = await importGradesFromFile(file, state);
-                setImportPreview(res);
-              } catch (err) {
-                setImportError(
-                  err instanceof Error
-                    ? err.message
-                    : "Impossible d'importer ce relevé de notes."
-                );
-              } finally {
-                setImporting(false);
-              }
-            }}
-            className="hidden"
-            aria-label="Importer un relevé de notes Excel ou CSV"
-          />
-          <button
-            type="button"
-            disabled={importing}
-            onClick={() => {
-              setImportError(null);
-              fileInputRef.current?.click();
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b1f3f] bg-white hover:bg-slate-50 disabled:opacity-50 text-[#0b1f3f] text-xs font-semibold whitespace-nowrap cursor-pointer"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            {importing ? 'Analyse…' : 'Importer relevé de notes'}
-          </button>
+          {canDeliberateAndRattrapage && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  setImporting(true);
+                  setImportError(null);
+                  try {
+                    const res = await importGradesFromFile(file, state);
+                    setImportPreview(res);
+                  } catch (err) {
+                    setImportError(
+                      err instanceof Error
+                        ? err.message
+                        : "Impossible d'importer ce relevé de notes."
+                    );
+                  } finally {
+                    setImporting(false);
+                  }
+                }}
+                className="hidden"
+                aria-label="Importer un relevé de notes Excel ou CSV"
+              />
+              <button
+                type="button"
+                disabled={importing}
+                onClick={() => {
+                  setImportError(null);
+                  fileInputRef.current?.click();
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b1f3f] bg-white hover:bg-slate-50 disabled:opacity-50 text-[#0b1f3f] text-xs font-semibold whitespace-nowrap cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                {importing ? 'Analyse…' : 'Importer relevé de notes'}
+              </button>
+            </>
+          )}
           <button
             type="button"
             disabled={rows.length === 0}
@@ -383,16 +390,17 @@ export function ExamsView({
                   Mention : <strong className="text-[#161e2e]">{summary.mention}</strong>
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {(summary.decision === 'Rattrapage' || summary.decision === 'Ajourné') && (
-                    <button
-                      type="button"
-                      onClick={() => openRattrapageModal(student)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      Rattrapage
-                    </button>
-                  )}
+                  {canDeliberateAndRattrapage &&
+                    (summary.decision === 'Rattrapage' || summary.decision === 'Ajourné') && (
+                      <button
+                        type="button"
+                        onClick={() => openRattrapageModal(student)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        Rattrapage
+                      </button>
+                    )}
                   <button
                     type="button"
                     onClick={async () => {
@@ -489,16 +497,17 @@ export function ExamsView({
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="inline-flex items-center gap-1.5">
-                      {(summary.decision === 'Rattrapage' || summary.decision === 'Ajourné') && (
-                        <button
-                          type="button"
-                          onClick={() => openRattrapageModal(student)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          Rattrapage
-                        </button>
-                      )}
+                      {canDeliberateAndRattrapage &&
+                        (summary.decision === 'Rattrapage' || summary.decision === 'Ajourné') && (
+                          <button
+                            type="button"
+                            onClick={() => openRattrapageModal(student)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            Rattrapage
+                          </button>
+                        )}
                       <button
                         type="button"
                         onClick={async () => {
@@ -540,7 +549,7 @@ export function ExamsView({
       </div>
 
       {/* Inline Rattrapage Entry Modal */}
-      {rattrapageStudent && (
+      {canDeliberateAndRattrapage && rattrapageStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
           <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-md shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
@@ -791,7 +800,7 @@ export function ExamsView({
         </PrintModal>
       )}
 
-      {importPreview && (
+      {canDeliberateAndRattrapage && importPreview && (
         <ImportGradesModal
           result={importPreview}
           onCancel={() => setImportPreview(null)}

@@ -22,6 +22,7 @@ import React, { useEffect, useState } from 'react';
 import { CreateAcademicYearModal } from './components/CreateAcademicYearModal';
 import { CreateTrimesterModal } from './components/CreateTrimesterModal';
 import { AuthSession, LoginPage } from './components/LoginPage';
+import { NotificationCenter } from './components/NotificationCenter';
 import { AcademicView } from './components/modules/AcademicView';
 import { AttendanceView } from './components/modules/AttendanceView';
 import { CommunicationView } from './components/modules/CommunicationView';
@@ -49,6 +50,7 @@ import {
   Payment,
   ScheduleSlot,
   Student,
+  SystemNotification,
   Trimester,
   UE,
   UserRole,
@@ -56,8 +58,16 @@ import {
 import {
   CreateAcademicYearResult,
   exportCerecToExcel,
+  formatFCFA,
   getAvailableAcademicYears,
 } from './utils/lmd';
+import {
+  canAccessModule,
+  getRoleDefinition,
+  getRolePermissions,
+  ORDERED_ROLES,
+  ROLE_DEFINITIONS,
+} from './utils/permissions';
 
 const STORAGE_KEY = 'cerec_iscom_lmd_state_v1';
 const ROLE_KEY = 'cerec_iscom_active_role_v1';
@@ -139,24 +149,6 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-const ROLE_ALLOWED_MODULES: Record<UserRole, ModuleId[]> = {
-  admin: ['dash', 'etu', 'aca', 'pres', 'notes', 'exam', 'fin', 'ens', 'surv', 'com', 'par'],
-  direction: ['dash', 'etu', 'aca', 'notes', 'exam', 'ens', 'com', 'par'],
-  scolarite: ['dash', 'etu', 'aca', 'pres', 'notes', 'exam', 'com', 'par'],
-  caisse: ['dash', 'etu', 'fin', 'com', 'par'],
-  enseignant: ['dash', 'aca', 'pres', 'notes', 'com', 'par'],
-  surveillance: ['dash', 'surv', 'etu', 'pres', 'com', 'par'],
-};
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: 'Administrateur Général',
-  direction: 'Direction Académique',
-  scolarite: 'Scolarité & Examens',
-  caisse: 'Caisse & Comptabilité',
-  enseignant: 'Corps Enseignant',
-  surveillance: 'Surveillance Guérite',
-};
-
 export default function App() {
   const [state, setState] = useState<CerecState>(() => {
     const seed = createInitialSeedData();
@@ -193,6 +185,14 @@ export default function App() {
           Array.isArray(parsed.trimestres) && parsed.trimestres.length > 0
             ? parsed.trimestres
             : seed.trimestres ?? [];
+        const rawNotifications = Array.isArray(parsed.notifications)
+          ? parsed.notifications
+          : seed.notifications ?? [];
+        const notifications = rawNotifications.map((n) =>
+          n.targetRoles.includes('dg') && !n.targetRoles.includes('direction')
+            ? { ...n, targetRoles: [...n.targetRoles, 'direction' as UserRole] }
+            : n
+        );
         const settings: LmdSettings = {
           ...seed.settings,
           ...(parsed.settings ?? {}),
@@ -205,7 +205,16 @@ export default function App() {
             )?.id ??
             seed.settings.trimestreActifId,
         };
-        return { ...seed, ...parsed, filieres, ues, students, trimestres, settings };
+        return {
+          ...seed,
+          ...parsed,
+          filieres,
+          ues,
+          students,
+          trimestres,
+          notifications,
+          settings,
+        };
       }
     } catch {
       // ignore storage errors
@@ -218,7 +227,7 @@ export default function App() {
       const saved = localStorage.getItem(AUTH_SESSION_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as AuthSession;
-        if (parsed && parsed.email && ROLE_ALLOWED_MODULES[parsed.role]) {
+        if (parsed && parsed.email && ROLE_DEFINITIONS[parsed.role]) {
           return parsed;
         }
       }
@@ -233,7 +242,7 @@ export default function App() {
       const savedSession = localStorage.getItem(AUTH_SESSION_KEY);
       if (savedSession) {
         const parsed = JSON.parse(savedSession) as AuthSession;
-        if (parsed?.role && ROLE_ALLOWED_MODULES[parsed.role]) {
+        if (parsed?.role && ROLE_DEFINITIONS[parsed.role]) {
           return parsed.role;
         }
       }
@@ -241,7 +250,7 @@ export default function App() {
       // ignore
     }
     const saved = localStorage.getItem(ROLE_KEY) as UserRole | null;
-    return saved && ROLE_ALLOWED_MODULES[saved] ? saved : 'admin';
+    return saved && ROLE_DEFINITIONS[saved] ? saved : 'dg';
   });
 
   const [activeModule, setActiveModule] = useState<ModuleId>('dash');
@@ -273,9 +282,18 @@ export default function App() {
     }
   }, [state]);
 
+  const roleDef = getRoleDefinition(activeRole);
+  const perms = getRolePermissions(activeRole);
+
+  useEffect(() => {
+    if (authSession && authSession.role !== 'admin' && activeRole !== authSession.role) {
+      setActiveRole(authSession.role);
+    }
+  }, [authSession, activeRole]);
+
   useEffect(() => {
     localStorage.setItem(ROLE_KEY, activeRole);
-    const allowed = ROLE_ALLOWED_MODULES[activeRole];
+    const allowed = getRoleDefinition(activeRole).allowedModules;
     if (!allowed.includes(activeModule)) {
       setActiveModule(allowed[0] ?? 'dash');
     }
@@ -283,13 +301,14 @@ export default function App() {
   }, [activeRole, activeModule]);
 
   const navigateTo = (next: ModuleId) => {
+    if (!canAccessModule(activeRole, next)) return;
     if (next === activeModule) return;
     setModuleHistory((prev) => [...prev.slice(-19), activeModule]);
     setActiveModule(next);
   };
 
   const handleBack = () => {
-    const allowed = ROLE_ALLOWED_MODULES[activeRole];
+    const allowed = getRoleDefinition(activeRole).allowedModules;
     const remaining = [...moduleHistory];
     while (remaining.length > 0) {
       const prev = remaining.pop()!;
@@ -310,12 +329,24 @@ export default function App() {
     }, 3500);
   };
 
+  const guardWrite = (allowed = true): boolean => {
+    if (perms.readOnly || !allowed) {
+      notify(
+        perms.readOnly
+          ? 'Mode Supervision (Directeur Général) : lecture seule, aucune modification autorisée.'
+          : 'Action non autorisée pour ce profil.'
+      );
+      return false;
+    }
+    return true;
+  };
+
   const handleLogin = (session: AuthSession) => {
     setAuthSession(session);
     setActiveRole(session.role);
     setCampusFilter(session.campus);
     setModuleHistory([]);
-    setActiveModule(ROLE_ALLOWED_MODULES[session.role][0] ?? 'dash');
+    setActiveModule(getRoleDefinition(session.role).allowedModules[0] ?? 'dash');
     try {
       if (session.remember) {
         localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
@@ -339,18 +370,92 @@ export default function App() {
     setModuleHistory([]);
   };
 
-  const visibleNav = NAV_ITEMS.filter((item) =>
-    ROLE_ALLOWED_MODULES[activeRole].includes(item.id)
-  );
+  const visibleNav = NAV_ITEMS.filter((item) => canAccessModule(activeRole, item.id));
   const currentMeta = NAV_ITEMS.find((n) => n.id === activeModule) ?? NAV_ITEMS[0];
 
-  // State Mutations
+  const handleMarkNotificationRead = (id: string) => {
+    setState((prev) => ({
+      ...prev,
+      notifications: (prev.notifications ?? []).map((n) =>
+        n.id === id && !n.readByRoles.includes(activeRole)
+          ? { ...n, readByRoles: [...n.readByRoles, activeRole] }
+          : n
+      ),
+    }));
+  };
+
+  const handleMarkAllNotificationsRead = () => {
+    setState((prev) => ({
+      ...prev,
+      notifications: (prev.notifications ?? []).map((n) =>
+        n.targetRoles.includes(activeRole) &&
+        (campusFilter === 'Tous' || n.campus === campusFilter) &&
+        !n.readByRoles.includes(activeRole)
+          ? { ...n, readByRoles: [...n.readByRoles, activeRole] }
+          : n
+      ),
+    }));
+  };
+
+  // State Mutations (permission & read-only guarded)
   const handleAddStudent = (student: Student) => {
-    setState((prev) => ({ ...prev, students: [student, ...prev.students] }));
-    notify(`Étudiant inscrit : ${student.nom} ${student.prenom} (${student.matricule})`);
+    if (!guardWrite(perms.canManageStudents)) return;
+    const nowIso = new Date().toISOString();
+    const actorName = authSession?.displayName ?? roleDef.label;
+    setState((prev) => {
+      const filiere = prev.filieres.find((f) => f.code === student.filiereCode);
+      const fraisInscription = filiere?.fraisInscription ?? 75000;
+      const scolariteNette = Math.round(
+        (filiere?.scolariteAnnuelle ?? 480000) * (1 - (student.boursePct || 0) / 100)
+      );
+      const totalDu = fraisInscription + scolariteNette;
+      const baseId = Date.now();
+
+      const caisseNotif: SystemNotification = {
+        id: `notif-${baseId}-caisse`,
+        category: 'inscription',
+        title: 'Nouvelle inscription étudiant à encaisser',
+        message: `${student.nom} ${student.prenom} (${student.matricule} · ${student.filiereCode} ${student.niveau}) inscrit(e) à ${student.campus} — Frais d’inscription : ${formatFCFA(fraisInscription)} · Scolarité due : ${formatFCFA(totalDu)}.`,
+        targetRoles: ['caisse'],
+        campus: student.campus,
+        targetModule: 'fin',
+        relatedStudentId: student.id,
+        amountFCFA: totalDu,
+        createdAt: nowIso,
+        actorRole: activeRole,
+        actorName,
+        readByRoles: [],
+      };
+
+      const dgNotif: SystemNotification = {
+        id: `notif-${baseId}-dg`,
+        category: 'inscription',
+        title: 'Nouvelle inscription étudiant enregistrée',
+        message: `${student.nom} ${student.prenom} (${student.matricule} · ${student.filiereCode} ${student.niveau}) inscrit(e) sur le campus ${student.campus} (${student.anneeAcademique}) par ${actorName}.`,
+        targetRoles: ['dg', 'direction'],
+        campus: student.campus,
+        targetModule: 'etu',
+        relatedStudentId: student.id,
+        amountFCFA: totalDu,
+        createdAt: nowIso,
+        actorRole: activeRole,
+        actorName,
+        readByRoles: [],
+      };
+
+      return {
+        ...prev,
+        students: [student, ...prev.students],
+        notifications: [caisseNotif, dgNotif, ...(prev.notifications ?? [])].slice(0, 100),
+      };
+    });
+    notify(
+      `Étudiant inscrit : ${student.nom} ${student.prenom} (${student.matricule}) — Notification envoyée à la Caisse, au Directeur Général et au Directeur Académique.`
+    );
   };
 
   const handleUpdateStudent = (student: Student) => {
+    if (!guardWrite(perms.canManageStudents)) return;
     setState((prev) => ({
       ...prev,
       students: prev.students.map((s) => (s.id === student.id ? student : s)),
@@ -359,6 +464,7 @@ export default function App() {
   };
 
   const handleDeleteStudent = (id: string) => {
+    if (!guardWrite(perms.canManageStudents)) return;
     setState((prev) => ({
       ...prev,
       students: prev.students.filter((s) => s.id !== id),
@@ -367,11 +473,13 @@ export default function App() {
   };
 
   const handleAddFiliere = (filiere: Filiere) => {
+    if (!guardWrite(perms.canManageFilieresAndUes)) return;
     setState((prev) => ({ ...prev, filieres: [...prev.filieres, filiere] }));
     notify(`Filière ${filiere.code} ajoutée.`);
   };
 
   const handleUpdateFiliere = (filiere: Filiere) => {
+    if (!guardWrite(perms.canManageFilieresAndUes)) return;
     setState((prev) => {
       const previous = prev.filieres.find((f) => f.id === filiere.id);
       const codeChanged = previous && previous.code !== filiere.code;
@@ -399,6 +507,7 @@ export default function App() {
   };
 
   const handleDeleteFiliere = (id: string) => {
+    if (!guardWrite(perms.canManageFilieresAndUes)) return;
     setState((prev) => ({
       ...prev,
       filieres: prev.filieres.filter((f) => f.id !== id),
@@ -407,11 +516,13 @@ export default function App() {
   };
 
   const handleAddUe = (ue: UE) => {
+    if (!guardWrite(perms.canManageFilieresAndUes)) return;
     setState((prev) => ({ ...prev, ues: [...prev.ues, ue] }));
     notify(`UE ${ue.code} ajoutée à la maquette LMD.`);
   };
 
   const handleUpdateUe = (ue: UE) => {
+    if (!guardWrite(perms.canManageFilieresAndUes)) return;
     setState((prev) => ({
       ...prev,
       ues: prev.ues.map((u) => (u.id === ue.id ? ue : u)),
@@ -420,16 +531,19 @@ export default function App() {
   };
 
   const handleDeleteUe = (id: string) => {
+    if (!guardWrite(perms.canManageFilieresAndUes)) return;
     setState((prev) => ({ ...prev, ues: prev.ues.filter((u) => u.id !== id) }));
     notify('UE retirée de la maquette.');
   };
 
   const handleAddSchedule = (slot: ScheduleSlot) => {
+    if (!guardWrite(perms.canManagePlanningAndTrimesters)) return;
     setState((prev) => ({ ...prev, schedule: [...prev.schedule, slot] }));
     notify('Séance ajoutée à l’emploi du temps.');
   };
 
   const handleUpdateSchedule = (slot: ScheduleSlot) => {
+    if (!guardWrite(perms.canManagePlanningAndTrimesters)) return;
     setState((prev) => ({
       ...prev,
       schedule: prev.schedule.map((s) => (s.id === slot.id ? slot : s)),
@@ -438,6 +552,7 @@ export default function App() {
   };
 
   const handleDeleteSchedule = (id: string) => {
+    if (!guardWrite(perms.canManagePlanningAndTrimesters)) return;
     setState((prev) => ({
       ...prev,
       schedule: prev.schedule.filter((s) => s.id !== id),
@@ -446,6 +561,7 @@ export default function App() {
   };
 
   const handleSetAttendance = (record: AttendanceRecord) => {
+    if (!guardWrite(perms.canMarkAttendance)) return;
     setState((prev) => {
       const exists = prev.attendance.some(
         (a) =>
@@ -467,6 +583,7 @@ export default function App() {
   };
 
   const handleBulkAttendance = (records: AttendanceRecord[]) => {
+    if (!guardWrite(perms.canMarkAttendance)) return;
     setState((prev) => {
       const filtered = prev.attendance.filter(
         (a) =>
@@ -480,6 +597,7 @@ export default function App() {
   };
 
   const handleClearAttendance = (date: string, ueId: string, studentIds: string[]) => {
+    if (!guardWrite(perms.canMarkAttendance)) return;
     setState((prev) => ({
       ...prev,
       attendance: prev.attendance.filter(
@@ -490,6 +608,7 @@ export default function App() {
   };
 
   const handleUpsertGrade = (grade: GradeRecord) => {
+    if (!guardWrite(perms.canEditGrades || perms.canDeliberateAndRattrapage)) return;
     setState((prev) => {
       const exists = prev.grades.some(
         (g) => g.studentId === grade.studentId && g.ueId === grade.ueId
@@ -504,6 +623,7 @@ export default function App() {
   };
 
   const handleBulkUpsertGrades = (records: GradeRecord[]) => {
+    if (!guardWrite(perms.canEditGrades || perms.canDeliberateAndRattrapage)) return;
     setState((prev) => {
       const map = new Map(prev.grades.map((g) => [`${g.studentId}__${g.ueId}`, g]));
       records.forEach((rec) => {
@@ -514,6 +634,7 @@ export default function App() {
   };
 
   const handleDeleteGrade = (studentId: string, ueId: string) => {
+    if (!guardWrite(perms.canEditGrades)) return;
     setState((prev) => ({
       ...prev,
       grades: prev.grades.filter(
@@ -524,11 +645,48 @@ export default function App() {
   };
 
   const handleAddPayment = (payment: Payment) => {
-    setState((prev) => ({ ...prev, payments: [payment, ...prev.payments] }));
-    notify(`Encaissement validé : ${payment.numeroRecu}`);
+    if (!guardWrite(perms.canCollectPayments)) return;
+    const nowIso = new Date().toISOString();
+    const actorName = authSession?.displayName ?? roleDef.label;
+    setState((prev) => {
+      const st = prev.students.find((s) => s.id === payment.studentId);
+      const isInscriptionPayment = payment.motif === 'Inscription';
+      const dgPaymentNotif: SystemNotification = {
+        id: `notif-${Date.now()}-pay`,
+        category: isInscriptionPayment ? 'inscription' : 'encaissement',
+        title: isInscriptionPayment
+          ? 'Inscription & encaissement Caisse'
+          : 'Encaissement Caisse enregistré',
+        message: `${
+          st
+            ? `${st.nom} ${st.prenom} (${st.matricule} · ${st.filiereCode} ${st.niveau})`
+            : payment.studentId
+        } — ${formatFCFA(payment.montant)} (${payment.motif} · ${payment.mode}), reçu ${payment.numeroRecu} par ${payment.caissier}.`,
+        targetRoles: ['dg', 'direction'],
+        campus: payment.campus,
+        targetModule: 'fin',
+        relatedStudentId: payment.studentId,
+        relatedPaymentId: payment.id,
+        amountFCFA: payment.montant,
+        createdAt: nowIso,
+        actorRole: activeRole,
+        actorName,
+        readByRoles: [],
+      };
+
+      return {
+        ...prev,
+        payments: [payment, ...prev.payments],
+        notifications: [dgPaymentNotif, ...(prev.notifications ?? [])].slice(0, 100),
+      };
+    });
+    notify(
+      `Encaissement validé : ${payment.numeroRecu} — Notification transmise au Directeur Général et au Directeur Académique.`
+    );
   };
 
   const handleDeletePayment = (id: string) => {
+    if (!guardWrite(perms.canCollectPayments)) return;
     setState((prev) => ({
       ...prev,
       payments: prev.payments.filter((p) => p.id !== id),
@@ -537,11 +695,13 @@ export default function App() {
   };
 
   const handleAddLecturer = (lecturer: Lecturer) => {
+    if (!guardWrite(perms.canManageFaculty)) return;
     setState((prev) => ({ ...prev, lecturers: [...prev.lecturers, lecturer] }));
     notify(`Enseignant ajouté : ${lecturer.nom}`);
   };
 
   const handleUpdateLecturer = (lecturer: Lecturer) => {
+    if (!guardWrite(perms.canManageFaculty)) return;
     setState((prev) => ({
       ...prev,
       lecturers: prev.lecturers.map((l) => (l.id === lecturer.id ? lecturer : l)),
@@ -550,6 +710,7 @@ export default function App() {
   };
 
   const handleDeleteLecturer = (id: string) => {
+    if (!guardWrite(perms.canManageFaculty)) return;
     setState((prev) => ({
       ...prev,
       lecturers: prev.lecturers.filter((l) => l.id !== id),
@@ -558,10 +719,12 @@ export default function App() {
   };
 
   const handleAddGateLog = (log: GateLog) => {
+    if (!guardWrite(perms.canOperateGate)) return;
     setState((prev) => ({ ...prev, gateLogs: [log, ...prev.gateLogs] }));
   };
 
   const handleMarkExit = (id: string) => {
+    if (!guardWrite(perms.canOperateGate)) return;
     const now = new Date().toTimeString().slice(0, 5);
     setState((prev) => ({
       ...prev,
@@ -573,6 +736,7 @@ export default function App() {
   };
 
   const handleCloseAllGateLogs = (campus: Campus | 'Tous') => {
+    if (!guardWrite(perms.canOperateGate)) return;
     const now = new Date().toTimeString().slice(0, 5);
     setState((prev) => ({
       ...prev,
@@ -586,6 +750,7 @@ export default function App() {
   };
 
   const handleDeleteGateLog = (id: string) => {
+    if (!guardWrite(perms.canOperateGate)) return;
     setState((prev) => ({
       ...prev,
       gateLogs: prev.gateLogs.filter((g) => g.id !== id),
@@ -594,6 +759,7 @@ export default function App() {
   };
 
   const handleAddAnnouncement = (ann: Announcement) => {
+    if (!guardWrite(perms.canPublishAnnouncementsAndMissions)) return;
     setState((prev) => ({
       ...prev,
       announcements: [ann, ...prev.announcements],
@@ -602,6 +768,7 @@ export default function App() {
   };
 
   const handleUpdateAnnouncement = (ann: Announcement) => {
+    if (!guardWrite(perms.canPublishAnnouncementsAndMissions)) return;
     setState((prev) => ({
       ...prev,
       announcements: prev.announcements.map((a) => (a.id === ann.id ? ann : a)),
@@ -610,6 +777,7 @@ export default function App() {
   };
 
   const handleDeleteAnnouncement = (id: string) => {
+    if (!guardWrite(perms.canPublishAnnouncementsAndMissions)) return;
     setState((prev) => ({
       ...prev,
       announcements: prev.announcements.filter((a) => a.id !== id),
@@ -618,11 +786,13 @@ export default function App() {
   };
 
   const handleAddMission = (task: MissionTask) => {
+    if (!guardWrite(perms.canPublishAnnouncementsAndMissions)) return;
     setState((prev) => ({ ...prev, missions: [task, ...prev.missions] }));
     notify('Mission assignée.');
   };
 
   const handleUpdateMission = (task: MissionTask) => {
+    if (!guardWrite(perms.canPublishAnnouncementsAndMissions)) return;
     setState((prev) => ({
       ...prev,
       missions: prev.missions.map((m) => (m.id === task.id ? task : m)),
@@ -631,6 +801,7 @@ export default function App() {
   };
 
   const handleUpdateMissionStatus = (id: string, statut: MissionTask['statut']) => {
+    if (!guardWrite(perms.canUpdateMissionStatus)) return;
     setState((prev) => ({
       ...prev,
       missions: prev.missions.map((m) => (m.id === id ? { ...m, statut } : m)),
@@ -638,6 +809,7 @@ export default function App() {
   };
 
   const handleDeleteMission = (id: string) => {
+    if (!guardWrite(perms.canPublishAnnouncementsAndMissions)) return;
     setState((prev) => ({
       ...prev,
       missions: prev.missions.filter((m) => m.id !== id),
@@ -646,14 +818,17 @@ export default function App() {
   };
 
   const handleUpdateSettings = (settings: LmdSettings) => {
+    if (!guardWrite(perms.canManageSystemSettings)) return;
     setState((prev) => ({ ...prev, settings }));
   };
 
   const handleImportState = (nextState: CerecState) => {
+    if (!guardWrite(perms.canManageSystemSettings)) return;
     setState(nextState);
   };
 
   const handleChangeActiveYear = (year: string) => {
+    if (!guardWrite(perms.canManageAcademicCalendar)) return;
     setState((prev) => ({
       ...prev,
       academicYears: Array.from(
@@ -665,6 +840,7 @@ export default function App() {
   };
 
   const handleAcademicYearCreated = (result: CreateAcademicYearResult) => {
+    if (!guardWrite(perms.canCreateAcademicYear)) return;
     setState(result.nextState);
     setCreateYearOpen(false);
     const details =
@@ -675,6 +851,7 @@ export default function App() {
   };
 
   const handleSaveTrimester = (trimester: Trimester, activate: boolean) => {
+    if (!guardWrite(perms.canManagePlanningAndTrimesters)) return;
     setState((prev) => {
       const list = prev.trimestres ?? [];
       const exists = list.some((t) => t.id === trimester.id);
@@ -716,6 +893,7 @@ export default function App() {
     year: string,
     activateFirst: boolean
   ) => {
+    if (!guardWrite(perms.canManagePlanningAndTrimesters)) return;
     setState((prev) => {
       const list = prev.trimestres ?? [];
       const first = created[0];
@@ -749,6 +927,7 @@ export default function App() {
   };
 
   const handleActivateTrimester = (trimesterId: string) => {
+    if (!guardWrite(perms.canManageAcademicCalendar)) return;
     setState((prev) => {
       const target = (prev.trimestres ?? []).find((t) => t.id === trimesterId);
       if (!target) return prev;
@@ -775,6 +954,7 @@ export default function App() {
   };
 
   const handleDeleteTrimester = (trimesterId: string) => {
+    if (!guardWrite(perms.canManagePlanningAndTrimesters)) return;
     setState((prev) => ({
       ...prev,
       trimestres: (prev.trimestres ?? []).filter((t) => t.id !== trimesterId),
@@ -787,6 +967,7 @@ export default function App() {
   };
 
   const executeResetDemo = () => {
+    if (!guardWrite(perms.canManageSystemSettings)) return;
     const fresh = createInitialSeedData();
     setState(fresh);
     setConfirmResetOpen(false);
@@ -849,26 +1030,45 @@ export default function App() {
             <p className="text-[11px] text-slate-400 truncate">{authSession.email}</p>
           </div>
         )}
-        <div className="space-y-1">
-          <label
-            htmlFor="role-switcher"
-            className="block text-[11px] text-slate-400 font-medium"
-          >
-            Espace actif
-          </label>
-          <select
-            id="role-switcher"
-            value={activeRole}
-            onChange={(e) => setActiveRole(e.target.value as UserRole)}
-            className="w-full px-2.5 py-2 rounded-lg bg-[#143263] border border-white/15 text-xs font-medium text-white focus:outline-none focus:border-[#e0a526]"
-          >
-            {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABELS[r]}
-              </option>
-            ))}
-          </select>
-        </div>
+        {authSession?.role === 'admin' ? (
+          <div className="space-y-1">
+            <label
+              htmlFor="role-switcher"
+              className="block text-[11px] text-slate-400 font-medium"
+            >
+              Espace actif (Admin)
+            </label>
+            <select
+              id="role-switcher"
+              value={activeRole}
+              onChange={(e) => setActiveRole(e.target.value as UserRole)}
+              className="w-full px-2.5 py-2 rounded-lg bg-[#143263] border border-white/15 text-xs font-medium text-white focus:outline-none focus:border-[#e0a526]"
+            >
+              {ORDERED_ROLES.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-[#143263]/70 border border-white/10 px-3 py-2 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                Profil & Mission
+              </span>
+              {perms.readOnly && (
+                <span className="px-1.5 py-0.5 rounded bg-[#e0a526]/20 border border-[#e0a526]/40 text-[10px] font-semibold text-[#eab33a]">
+                  Lecture seule
+                </span>
+              )}
+            </div>
+            <p className="text-xs font-bold text-white truncate">{roleDef.label}</p>
+            <p className="text-[11px] text-slate-300 leading-snug line-clamp-2">
+              {roleDef.mission}
+            </p>
+          </div>
+        )}
         <button
           type="button"
           onClick={handleLogout}
@@ -896,6 +1096,10 @@ export default function App() {
   const activeYearTrimesters = (state.trimestres ?? [])
     .filter((t) => t.anneeAcademique === state.settings.anneeAcademique)
     .sort((a, b) => a.code.localeCompare(b.code));
+
+  const activeTrimesterObj =
+    activeYearTrimesters.find((t) => t.id === state.settings.trimestreActifId) ??
+    activeYearTrimesters[0];
 
   return (
     <div className="min-h-screen flex bg-[#f8f9fb] text-[#161e2e] overflow-x-hidden">
@@ -960,59 +1164,85 @@ export default function App() {
               </div>
             </div>
 
-            <div className="hidden md:flex items-center gap-2 shrink-0">
-              <select
-                value={state.settings.anneeAcademique}
-                onChange={(e) => handleChangeActiveYear(e.target.value)}
-                aria-label="Année académique active"
-                title="Année académique en cours"
-                className="px-2.5 py-2 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f] focus:outline-none focus:border-[#0b1f3f]"
-              >
-                {getAvailableAcademicYears(state).map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                type="button"
-                onClick={() => setCreateYearOpen(true)}
-                title="Créer une nouvelle année académique"
-                className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <CalendarPlus className="w-3.5 h-3.5" />
-                <span className="hidden xl:inline">Nouvelle année</span>
-              </button>
-
-              {activeYearTrimesters.length > 0 && (
+            <div className="flex items-center gap-2 shrink-0">
+              <NotificationCenter
+                notifications={state.notifications ?? []}
+                activeRole={activeRole}
+                campusFilter={campusFilter}
+                onMarkRead={handleMarkNotificationRead}
+                onMarkAllRead={handleMarkAllNotificationsRead}
+                onNavigate={navigateTo}
+              />
+              <div className="hidden md:flex items-center gap-2 shrink-0">
+              {perms.canManageAcademicCalendar ? (
                 <select
-                  value={state.settings.trimestreActifId ?? activeYearTrimesters[0]?.id ?? ''}
-                  onChange={(e) => handleActivateTrimester(e.target.value)}
-                  aria-label="Trimestre actif"
-                  title="Trimestre actif"
-                  className="px-2.5 py-2 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f] focus:outline-none focus:border-[#0b1f3f]"
+                  value={state.settings.anneeAcademique}
+                  onChange={(e) => handleChangeActiveYear(e.target.value)}
+                  aria-label="Année académique active"
+                  title="Année académique en cours"
+                  className="px-2.5 py-2 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f] focus:outline-none focus:border-[#0b1f3f]"
                 >
-                  {activeYearTrimesters.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.code} · {t.nom}
+                  {getAvailableAcademicYears(state).map((y) => (
+                    <option key={y} value={y}>
+                      {y}
                     </option>
                   ))}
                 </select>
+              ) : (
+                <span className="px-2.5 py-2 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f] whitespace-nowrap">
+                  {state.settings.anneeAcademique}
+                </span>
               )}
 
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingTrimester(null);
-                  setCreateTrimesterOpen(true);
-                }}
-                title="Créer un trimestre"
-                className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-[#0b1f3f]/25 hover:border-[#0b1f3f] bg-white text-[#0b1f3f] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <CalendarRange className="w-3.5 h-3.5 text-[#c58b12]" />
-                <span className="hidden xl:inline">Trimestre</span>
-              </button>
+              {perms.canCreateAcademicYear && (
+                <button
+                  type="button"
+                  onClick={() => setCreateYearOpen(true)}
+                  title="Créer une nouvelle année académique"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <CalendarPlus className="w-3.5 h-3.5" />
+                  <span className="hidden xl:inline">Nouvelle année</span>
+                </button>
+              )}
+
+              {activeYearTrimesters.length > 0 &&
+                (perms.canManageAcademicCalendar ? (
+                  <select
+                    value={state.settings.trimestreActifId ?? activeYearTrimesters[0]?.id ?? ''}
+                    onChange={(e) => handleActivateTrimester(e.target.value)}
+                    aria-label="Trimestre actif"
+                    title="Trimestre actif"
+                    className="px-2.5 py-2 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f] focus:outline-none focus:border-[#0b1f3f]"
+                  >
+                    {activeYearTrimesters.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.code} · {t.nom}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  activeTrimesterObj && (
+                    <span className="px-2.5 py-2 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f] whitespace-nowrap">
+                      {activeTrimesterObj.code} · {activeTrimesterObj.nom}
+                    </span>
+                  )
+                ))}
+
+              {perms.canManagePlanningAndTrimesters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingTrimester(null);
+                    setCreateTrimesterOpen(true);
+                  }}
+                  title="Créer un trimestre"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-[#0b1f3f]/25 hover:border-[#0b1f3f] bg-white text-[#0b1f3f] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <CalendarRange className="w-3.5 h-3.5 text-[#c58b12]" />
+                  <span className="hidden xl:inline">Trimestre</span>
+                </button>
+              )}
 
               <select
                 value={campusFilter}
@@ -1036,38 +1266,52 @@ export default function App() {
                 <Download className="w-3.5 h-3.5 text-[#eab33a]" />
                 <span className="hidden lg:inline">Exporter Excel</span>
               </button>
+              </div>
             </div>
           </div>
 
           {/* Mobile & Small Tablet Quick Controls Bar */}
           <div className="flex md:hidden flex-wrap items-center gap-2 pt-2 border-t border-[#e3e7ef]">
-            <select
-              value={state.settings.anneeAcademique}
-              onChange={(e) => handleChangeActiveYear(e.target.value)}
-              aria-label="Année académique active mobile"
-              className="flex-1 min-w-[110px] px-2.5 py-1.5 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f]"
-            >
-              {getAvailableAcademicYears(state).map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-
-            {activeYearTrimesters.length > 0 && (
+            {perms.canManageAcademicCalendar ? (
               <select
-                value={state.settings.trimestreActifId ?? activeYearTrimesters[0]?.id ?? ''}
-                onChange={(e) => handleActivateTrimester(e.target.value)}
-                aria-label="Trimestre actif mobile"
-                className="flex-1 min-w-[110px] px-2.5 py-1.5 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f]"
+                value={state.settings.anneeAcademique}
+                onChange={(e) => handleChangeActiveYear(e.target.value)}
+                aria-label="Année académique active mobile"
+                className="flex-1 min-w-[110px] px-2.5 py-1.5 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f]"
               >
-                {activeYearTrimesters.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.code} · {t.nom}
+                {getAvailableAcademicYears(state).map((y) => (
+                  <option key={y} value={y}>
+                    {y}
                   </option>
                 ))}
               </select>
+            ) : (
+              <span className="px-2.5 py-1.5 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f]">
+                {state.settings.anneeAcademique}
+              </span>
             )}
+
+            {activeYearTrimesters.length > 0 &&
+              (perms.canManageAcademicCalendar ? (
+                <select
+                  value={state.settings.trimestreActifId ?? activeYearTrimesters[0]?.id ?? ''}
+                  onChange={(e) => handleActivateTrimester(e.target.value)}
+                  aria-label="Trimestre actif mobile"
+                  className="flex-1 min-w-[110px] px-2.5 py-1.5 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f]"
+                >
+                  {activeYearTrimesters.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.code} · {t.nom}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                activeTrimesterObj && (
+                  <span className="px-2.5 py-1.5 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f]">
+                    {activeTrimesterObj.code}
+                  </span>
+                )
+              ))}
 
             <select
               value={campusFilter}
@@ -1081,27 +1325,31 @@ export default function App() {
             </select>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setCreateYearOpen(true)}
-                title="Nouvelle année académique"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
-              >
-                <CalendarPlus className="w-3.5 h-3.5" />
-                Année
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingTrimester(null);
-                  setCreateTrimesterOpen(true);
-                }}
-                title="Créer un trimestre"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#e3e7ef] bg-white text-[#0b1f3f] text-xs font-semibold cursor-pointer"
-              >
-                <CalendarRange className="w-3.5 h-3.5 text-[#c58b12]" />
-                Trim.
-              </button>
+              {perms.canCreateAcademicYear && (
+                <button
+                  type="button"
+                  onClick={() => setCreateYearOpen(true)}
+                  title="Nouvelle année académique"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
+                >
+                  <CalendarPlus className="w-3.5 h-3.5" />
+                  Année
+                </button>
+              )}
+              {perms.canManagePlanningAndTrimesters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingTrimester(null);
+                    setCreateTrimesterOpen(true);
+                  }}
+                  title="Créer un trimestre"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#e3e7ef] bg-white text-[#0b1f3f] text-xs font-semibold cursor-pointer"
+                >
+                  <CalendarRange className="w-3.5 h-3.5 text-[#c58b12]" />
+                  Trim.
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -1119,19 +1367,37 @@ export default function App() {
         </header>
 
         {/* Active Module Content */}
-        <main className="flex-1 p-4 sm:p-6 max-w-[1400px] w-full mx-auto">
+        <main className="flex-1 p-4 sm:p-6 max-w-[1400px] w-full mx-auto space-y-5">
+          {perms.readOnly && (
+            <div className="bg-white border border-[#e3e7ef] border-t-2 border-t-[#e0a526] rounded-lg px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="text-[#161e2e]">
+                <strong className="text-[#0b1f3f]">{roleDef.label}</strong> — Vue globale sur toute
+                la plateforme ({visibleNav.length} rubriques) sans droit de modification.
+              </div>
+              <span className="px-2 py-0.5 rounded border border-[#e0a526]/50 bg-[#fff4d6] text-[#6b4e07] font-semibold">
+                Lecture seule
+              </span>
+            </div>
+          )}
+
           {activeModule === 'dash' && (
             <DashboardView
               state={state}
               campusFilter={campusFilter}
               activeRole={activeRole}
               onNavigate={navigateTo}
+              onNotify={notify}
+              onMarkNotificationRead={handleMarkNotificationRead}
+              onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
             />
           )}
           {activeModule === 'etu' && (
             <StudentsView
               state={state}
               campusFilter={campusFilter}
+              canManageStudents={perms.canManageStudents}
+              canCollectPayments={perms.canCollectPayments}
+              canViewGrades={perms.canViewStudentGrades}
               onAddStudent={handleAddStudent}
               onUpdateStudent={handleUpdateStudent}
               onDeleteStudent={handleDeleteStudent}
@@ -1143,6 +1409,8 @@ export default function App() {
             <AcademicView
               state={state}
               campusFilter={campusFilter}
+              canManageFilieresAndUes={perms.canManageFilieresAndUes}
+              canManagePlanningAndTrimesters={perms.canManagePlanningAndTrimesters}
               onAddFiliere={handleAddFiliere}
               onUpdateFiliere={handleUpdateFiliere}
               onDeleteFiliere={handleDeleteFiliere}
@@ -1153,10 +1421,12 @@ export default function App() {
               onUpdateSchedule={handleUpdateSchedule}
               onDeleteSchedule={handleDeleteSchedule}
               onOpenCreateTrimester={() => {
+                if (!guardWrite(perms.canManagePlanningAndTrimesters)) return;
                 setEditingTrimester(null);
                 setCreateTrimesterOpen(true);
               }}
               onEditTrimester={(t) => {
+                if (!guardWrite(perms.canManagePlanningAndTrimesters)) return;
                 setEditingTrimester(t);
                 setCreateTrimesterOpen(true);
               }}
@@ -1168,6 +1438,7 @@ export default function App() {
             <AttendanceView
               state={state}
               campusFilter={campusFilter}
+              canMarkAttendance={perms.canMarkAttendance}
               onSetAttendance={handleSetAttendance}
               onBulkAttendance={handleBulkAttendance}
               onClearAttendance={handleClearAttendance}
@@ -1177,6 +1448,7 @@ export default function App() {
             <GradesView
               state={state}
               campusFilter={campusFilter}
+              canEditGrades={perms.canEditGrades}
               onUpsertGrade={handleUpsertGrade}
               onBulkUpsertGrades={handleBulkUpsertGrades}
               onDeleteGrade={handleDeleteGrade}
@@ -1187,6 +1459,7 @@ export default function App() {
             <ExamsView
               state={state}
               campusFilter={campusFilter}
+              canDeliberateAndRattrapage={perms.canDeliberateAndRattrapage}
               onUpsertGrade={handleUpsertGrade}
               onBulkUpsertGrades={handleBulkUpsertGrades}
               onNotify={notify}
@@ -1196,8 +1469,11 @@ export default function App() {
             <FinanceView
               state={state}
               campusFilter={campusFilter}
+              activeRole={activeRole}
+              canCollectPayments={perms.canCollectPayments}
               onAddPayment={handleAddPayment}
               onDeletePayment={handleDeletePayment}
+              onMarkNotificationRead={handleMarkNotificationRead}
               onNotify={notify}
             />
           )}
@@ -1205,6 +1481,7 @@ export default function App() {
             <FacultyView
               state={state}
               campusFilter={campusFilter}
+              canManageFaculty={perms.canManageFaculty}
               onAddLecturer={handleAddLecturer}
               onUpdateLecturer={handleUpdateLecturer}
               onDeleteLecturer={handleDeleteLecturer}
@@ -1214,6 +1491,7 @@ export default function App() {
             <SurveillanceView
               state={state}
               campusFilter={campusFilter}
+              canOperateGate={perms.canOperateGate}
               onAddGateLog={handleAddGateLog}
               onMarkExit={handleMarkExit}
               onCloseAllGateLogs={() => handleCloseAllGateLogs(campusFilter)}
@@ -1224,6 +1502,9 @@ export default function App() {
             <CommunicationView
               state={state}
               campusFilter={campusFilter}
+              activeRole={activeRole}
+              canPublish={perms.canPublishAnnouncementsAndMissions}
+              canUpdateMissionStatus={perms.canUpdateMissionStatus}
               onAddAnnouncement={handleAddAnnouncement}
               onUpdateAnnouncement={handleUpdateAnnouncement}
               onDeleteAnnouncement={handleDeleteAnnouncement}
@@ -1237,17 +1518,31 @@ export default function App() {
             <SettingsView
               state={state}
               activeRole={activeRole}
-              onChangeRole={setActiveRole}
+              canSwitchRoles={authSession.role === 'admin'}
+              canManageSettings={perms.canManageSystemSettings}
+              canCreateAcademicYear={perms.canCreateAcademicYear}
+              canManageTrimesters={perms.canManagePlanningAndTrimesters}
+              onChangeRole={(nextRole) => {
+                if (authSession.role !== 'admin') return;
+                setActiveRole(nextRole);
+              }}
               onUpdateSettings={handleUpdateSettings}
               onImportState={handleImportState}
-              onOpenCreateYear={() => setCreateYearOpen(true)}
+              onOpenCreateYear={() => {
+                if (!guardWrite(perms.canCreateAcademicYear)) return;
+                setCreateYearOpen(true);
+              }}
               onOpenCreateTrimester={() => {
+                if (!guardWrite(perms.canManagePlanningAndTrimesters)) return;
                 setEditingTrimester(null);
                 setCreateTrimesterOpen(true);
               }}
               onActivateYear={handleChangeActiveYear}
               onActivateTrimester={handleActivateTrimester}
-              onResetDemo={() => setConfirmResetOpen(true)}
+              onResetDemo={() => {
+                if (!guardWrite(perms.canManageSystemSettings)) return;
+                setConfirmResetOpen(true);
+              }}
               onNotify={notify}
             />
           )}
@@ -1255,7 +1550,7 @@ export default function App() {
       </div>
 
       {/* Create New Academic Year Modal */}
-      {createYearOpen && (
+      {perms.canCreateAcademicYear && createYearOpen && (
         <CreateAcademicYearModal
           state={state}
           onClose={() => setCreateYearOpen(false)}
@@ -1264,7 +1559,7 @@ export default function App() {
       )}
 
       {/* Create / Edit Trimester Modal */}
-      {createTrimesterOpen && (
+      {perms.canManagePlanningAndTrimesters && createTrimesterOpen && (
         <CreateTrimesterModal
           state={state}
           editing={editingTrimester}
@@ -1278,7 +1573,7 @@ export default function App() {
       )}
 
       {/* In-App Confirmation Modal for Demo Reset (avoids window.confirm) */}
-      {confirmResetOpen && (
+      {perms.canManageSystemSettings && confirmResetOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4">
           <div className="bg-white border border-[#e3e7ef] rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl">
             <h3 className="text-base font-bold text-[#161e2e]">

@@ -12,6 +12,7 @@ import { OfficialDocumentHeader, PrintModal } from '../PrintModal';
 interface AttendanceViewProps {
   state: CerecState;
   campusFilter: Campus | 'Tous';
+  canMarkAttendance?: boolean;
   onSetAttendance: (record: AttendanceRecord) => void;
   onBulkAttendance: (records: AttendanceRecord[]) => void;
   onClearAttendance: (date: string, ueId: string, studentIds: string[]) => void;
@@ -20,6 +21,7 @@ interface AttendanceViewProps {
 export function AttendanceView({
   state,
   campusFilter,
+  canMarkAttendance = true,
   onSetAttendance,
   onBulkAttendance,
   onClearAttendance,
@@ -55,6 +57,7 @@ export function AttendanceView({
 
   const handleQuickScan = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canMarkAttendance) return;
     const q = scanCode.trim().toLowerCase();
     if (!q || !selectedUe) return;
     const matched = state.students.find(
@@ -90,7 +93,7 @@ export function AttendanceView({
   };
 
   const markStatus = (studentId: string, statut: AttendanceStatus) => {
-    if (!selectedUe) return;
+    if (!canMarkAttendance || !selectedUe) return;
     const now =
       statut === 'Présent' || statut === 'Retard'
         ? new Date().toTimeString().slice(0, 5)
@@ -106,7 +109,7 @@ export function AttendanceView({
   };
 
   const handleMarkAllPresent = () => {
-    if (!selectedUe || classStudents.length === 0) return;
+    if (!canMarkAttendance || !selectedUe || classStudents.length === 0) return;
     const now = new Date().toTimeString().slice(0, 5);
     const records: AttendanceRecord[] = classStudents.map((s) => ({
       id: `att-${date}-${selectedUe.id}-${s.id}`,
@@ -120,7 +123,7 @@ export function AttendanceView({
   };
 
   const handleResetSession = () => {
-    if (!selectedUe || classStudents.length === 0) return;
+    if (!canMarkAttendance || !selectedUe || classStudents.length === 0) return;
     onClearAttendance(
       date,
       selectedUe.id,
@@ -132,7 +135,7 @@ export function AttendanceView({
     <div className="space-y-5">
       {/* Controls & QR Scan */}
       <div className="bg-white border border-[#e3e7ef] rounded-lg p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-        <div className="lg:col-span-5">
+        <div className={canMarkAttendance ? 'lg:col-span-5' : 'lg:col-span-8'}>
           <label className="block text-xs font-medium text-slate-600 mb-1">
             Cours / Unité d’Enseignement
           </label>
@@ -149,7 +152,7 @@ export function AttendanceView({
           </select>
         </div>
 
-        <div className="lg:col-span-2">
+        <div className={canMarkAttendance ? 'lg:col-span-2' : 'lg:col-span-4'}>
           <label className="block text-xs font-medium text-slate-600 mb-1">Date séance</label>
           <input
             type="date"
@@ -159,29 +162,31 @@ export function AttendanceView({
           />
         </div>
 
-        <form onSubmit={handleQuickScan} className="lg:col-span-5 flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
-          <div className="flex-1 min-w-0">
-            <label className="block text-xs font-medium text-slate-600 mb-1">
-              Scan QR Badge ou Matricule rapide
-            </label>
-            <div className="relative">
-              <QrCode className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={scanCode}
-                onChange={(e) => setScanCode(e.target.value)}
-                placeholder="Ex: ISCOM-PN-26-001"
-                className="w-full pl-9 pr-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
-              />
+        {canMarkAttendance && (
+          <form onSubmit={handleQuickScan} className="lg:col-span-5 flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+            <div className="flex-1 min-w-0">
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Scan QR Badge ou Matricule rapide
+              </label>
+              <div className="relative">
+                <QrCode className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={scanCode}
+                  onChange={(e) => setScanCode(e.target.value)}
+                  placeholder="Ex: ISCOM-PN-26-001"
+                  className="w-full pl-9 pr-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
+                />
+              </div>
             </div>
-          </div>
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            Pointer
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              Pointer
+            </button>
+          </form>
+        )}
       </div>
 
       {scanFeedback && (
@@ -222,22 +227,26 @@ export function AttendanceView({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleMarkAllPresent}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
-            >
-              <CheckCheck className="w-3.5 h-3.5 text-[#eab33a]" />
-              Tout marquer Présent
-            </button>
-            <button
-              type="button"
-              onClick={handleResetSession}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e3e7ef] hover:bg-slate-100 text-xs font-medium text-slate-700 cursor-pointer whitespace-nowrap"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Réinitialiser
-            </button>
+            {canMarkAttendance && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleMarkAllPresent}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+                >
+                  <CheckCheck className="w-3.5 h-3.5 text-[#eab33a]" />
+                  Tout marquer Présent
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetSession}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e3e7ef] hover:bg-slate-100 text-xs font-medium text-slate-700 cursor-pointer whitespace-nowrap"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Réinitialiser
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={() => setPrintSheet(true)}
@@ -274,35 +283,56 @@ export function AttendanceView({
                     {absTotal} abs.
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {(['Présent', 'Retard', 'Absent', 'Justifié'] as AttendanceStatus[]).map(
-                    (st) => {
-                      const active = current === st;
-                      const activeClass =
-                        st === 'Présent'
-                          ? 'bg-emerald-700 text-white border-emerald-700'
-                          : st === 'Retard'
-                          ? 'bg-amber-600 text-white border-amber-600'
-                          : st === 'Absent'
-                          ? 'bg-red-700 text-white border-red-700'
-                          : 'bg-[#0b1f3f] text-white border-[#0b1f3f]';
-                      return (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => markStatus(s.id, st)}
-                          className={`px-2.5 py-2 rounded border text-xs font-medium transition-colors cursor-pointer ${
-                            active
-                              ? activeClass
-                              : 'border-[#e3e7ef] text-slate-600 hover:bg-slate-100'
-                          }`}
-                        >
-                          {st}
-                        </button>
-                      );
-                    }
-                  )}
-                </div>
+                {canMarkAttendance ? (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(['Présent', 'Retard', 'Absent', 'Justifié'] as AttendanceStatus[]).map(
+                      (st) => {
+                        const active = current === st;
+                        const activeClass =
+                          st === 'Présent'
+                            ? 'bg-emerald-700 text-white border-emerald-700'
+                            : st === 'Retard'
+                            ? 'bg-amber-600 text-white border-amber-600'
+                            : st === 'Absent'
+                            ? 'bg-red-700 text-white border-red-700'
+                            : 'bg-[#0b1f3f] text-white border-[#0b1f3f]';
+                        return (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => markStatus(s.id, st)}
+                            className={`px-2.5 py-2 rounded border text-xs font-medium transition-colors cursor-pointer ${
+                              active
+                                ? activeClass
+                                : 'border-[#e3e7ef] text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {st}
+                          </button>
+                        );
+                      }
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span className="text-slate-500">Statut séance</span>
+                    <span
+                      className={`inline-block px-2.5 py-1 rounded border font-medium ${
+                        current === 'Présent'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : current === 'Retard'
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : current === 'Absent'
+                          ? 'bg-red-50 text-red-700 border-red-200'
+                          : current === 'Justifié'
+                          ? 'bg-[#f8f9fb] text-[#0b1f3f] border-[#e3e7ef]'
+                          : 'bg-slate-50 text-slate-500 border-[#e3e7ef]'
+                      }`}
+                    >
+                      {current ?? 'Non pointé'}
+                    </span>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -320,7 +350,9 @@ export function AttendanceView({
                 <th className="py-3 px-4">Matricule</th>
                 <th className="py-3 px-4">Étudiant</th>
                 <th className="py-3 px-4">Total Abs.</th>
-                <th className="py-3 px-4 text-right">Marquer l’assiduité</th>
+                <th className="py-3 px-4 text-right">
+                  {canMarkAttendance ? 'Marquer l’assiduité' : 'Statut séance'}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e3e7ef]">
@@ -350,35 +382,53 @@ export function AttendanceView({
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <div className="inline-flex items-center gap-1.5">
-                        {(['Présent', 'Retard', 'Absent', 'Justifié'] as AttendanceStatus[]).map(
-                          (st) => {
-                            const active = current === st;
-                            const activeClass =
-                              st === 'Présent'
-                                ? 'bg-emerald-700 text-white border-emerald-700'
-                                : st === 'Retard'
-                                ? 'bg-amber-600 text-white border-amber-600'
-                                : st === 'Absent'
-                                ? 'bg-red-700 text-white border-red-700'
-                                : 'bg-[#0b1f3f] text-white border-[#0b1f3f]';
-                            return (
-                              <button
-                                key={st}
-                                type="button"
-                                onClick={() => markStatus(s.id, st)}
-                                className={`px-2.5 py-1 rounded border text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                                  active
-                                    ? activeClass
-                                    : 'border-[#e3e7ef] text-slate-600 hover:bg-slate-100'
-                                }`}
-                              >
-                                {st}
-                              </button>
-                            );
-                          }
-                        )}
-                      </div>
+                      {canMarkAttendance ? (
+                        <div className="inline-flex items-center gap-1.5">
+                          {(['Présent', 'Retard', 'Absent', 'Justifié'] as AttendanceStatus[]).map(
+                            (st) => {
+                              const active = current === st;
+                              const activeClass =
+                                st === 'Présent'
+                                  ? 'bg-emerald-700 text-white border-emerald-700'
+                                  : st === 'Retard'
+                                  ? 'bg-amber-600 text-white border-amber-600'
+                                  : st === 'Absent'
+                                  ? 'bg-red-700 text-white border-red-700'
+                                  : 'bg-[#0b1f3f] text-white border-[#0b1f3f]';
+                              return (
+                                <button
+                                  key={st}
+                                  type="button"
+                                  onClick={() => markStatus(s.id, st)}
+                                  className={`px-2.5 py-1 rounded border text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                                    active
+                                      ? activeClass
+                                      : 'border-[#e3e7ef] text-slate-600 hover:bg-slate-100'
+                                  }`}
+                                >
+                                  {st}
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
+                      ) : (
+                        <span
+                          className={`inline-block px-2.5 py-1 rounded border text-xs font-medium ${
+                            current === 'Présent'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : current === 'Retard'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : current === 'Absent'
+                              ? 'bg-red-50 text-red-700 border-red-200'
+                              : current === 'Justifié'
+                              ? 'bg-[#f8f9fb] text-[#0b1f3f] border-[#e3e7ef]'
+                              : 'bg-slate-50 text-slate-500 border-[#e3e7ef]'
+                          }`}
+                        >
+                          {current ?? 'Non pointé'}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );

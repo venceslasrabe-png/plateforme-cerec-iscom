@@ -30,6 +30,8 @@ import { OfficialDocumentHeader, PrintModal } from '../PrintModal';
 interface AcademicViewProps {
   state: CerecState;
   campusFilter: Campus | 'Tous';
+  canManageFilieresAndUes?: boolean;
+  canManagePlanningAndTrimesters?: boolean;
   onAddFiliere: (filiere: Filiere) => void;
   onUpdateFiliere: (filiere: Filiere) => void;
   onDeleteFiliere: (id: string) => void;
@@ -57,6 +59,8 @@ const JOURS: ScheduleSlot['jour'][] = [
 export function AcademicView({
   state,
   campusFilter,
+  canManageFilieresAndUes = true,
+  canManagePlanningAndTrimesters = true,
   onAddFiliere,
   onUpdateFiliere,
   onDeleteFiliere,
@@ -393,14 +397,16 @@ export function AcademicView({
                   </option>
                 ))}
               </select>
-              <button
-                type="button"
-                onClick={onOpenCreateTrimester}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Créer un trimestre
-              </button>
+              {canManagePlanningAndTrimesters && (
+                <button
+                  type="button"
+                  onClick={onOpenCreateTrimester}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Créer un trimestre
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -437,24 +443,26 @@ export function AcademicView({
               </select>
 
               {subTab === 'maquette' ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={openCreateFiliere}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b1f3f] text-[#0b1f3f] hover:bg-slate-50 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Nouvelle filière
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openCreateUe}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-[#eab33a]" />
-                    Ajouter une UE
-                  </button>
-                </>
+                canManageFilieresAndUes ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={openCreateFiliere}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b1f3f] text-[#0b1f3f] hover:bg-slate-50 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Nouvelle filière
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openCreateUe}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-[#eab33a]" />
+                      Ajouter une UE
+                    </button>
+                  </>
+                ) : null
               ) : (
                 <>
                   <button
@@ -465,14 +473,16 @@ export function AcademicView({
                     <Printer className="w-3.5 h-3.5" />
                     Imprimer planning
                   </button>
-                  <button
-                    type="button"
-                    onClick={openCreateSlot}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-[#eab33a]" />
-                    Planifier un cours
-                  </button>
+                  {canManagePlanningAndTrimesters && (
+                    <button
+                      type="button"
+                      onClick={openCreateSlot}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-[#eab33a]" />
+                      Planifier un cours
+                    </button>
+                  )}
                 </>
               )}
             </>
@@ -496,24 +506,26 @@ export function AcademicView({
                     </h4>
                     <p className="text-xs text-slate-500 mt-0.5 truncate">{f.departement}</p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openEditFiliere(f)}
-                      aria-label={`Modifier filière ${f.code}`}
-                      className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteFiliere(f.id)}
-                      aria-label={`Supprimer filière ${f.code}`}
-                      className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {canManageFilieresAndUes && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openEditFiliere(f)}
+                        aria-label={`Modifier filière ${f.code}`}
+                        className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteFiliere(f.id)}
+                        aria-label={`Supprimer filière ${f.code}`}
+                        className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-2.5 pt-2.5 border-t border-[#e3e7ef] space-y-2">
                   <p className="text-[11px] text-slate-600 leading-relaxed">
@@ -550,7 +562,7 @@ export function AcademicView({
                     <th className="py-3 px-4 text-right">Coef.</th>
                     <th className="py-3 px-4 text-right">Vol. Hor.</th>
                     <th className="py-3 px-4">Enseignant</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    {canManageFilieresAndUes && <th className="py-3 px-4 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e3e7ef]">
@@ -584,26 +596,28 @@ export function AcademicView({
                         <td className="py-3 px-4 text-xs text-slate-700">
                           {ens ? ens.nom : 'Non affecté'}
                         </td>
-                        <td className="py-3 px-4 text-right">
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openEditUe(u)}
-                              aria-label={`Modifier ${u.code}`}
-                              className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onDeleteUe(u.id)}
-                              aria-label={`Supprimer ${u.code}`}
-                              className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
+                        {canManageFilieresAndUes && (
+                          <td className="py-3 px-4 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openEditUe(u)}
+                                aria-label={`Modifier ${u.code}`}
+                                className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteUe(u.id)}
+                                aria-label={`Supprimer ${u.code}`}
+                                className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -640,24 +654,26 @@ export function AcademicView({
                           <span className="font-mono text-xs font-semibold text-[#c58b12] tabular-nums">
                             {slot.heureDebut} – {slot.heureFin}
                           </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openEditSlot(slot)}
-                              aria-label="Modifier séance"
-                              className="text-slate-500 hover:text-[#0b1f3f] p-1 cursor-pointer"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onDeleteSchedule(slot.id)}
-                              aria-label="Supprimer séance"
-                              className="text-slate-400 hover:text-red-700 p-1 cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          {canManagePlanningAndTrimesters && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openEditSlot(slot)}
+                                aria-label="Modifier séance"
+                                className="text-slate-500 hover:text-[#0b1f3f] p-1 cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteSchedule(slot.id)}
+                                aria-label="Supprimer séance"
+                                className="text-slate-400 hover:text-red-700 p-1 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         <p className="text-sm font-semibold text-[#161e2e]">
                           {ue ? `${ue.code} — ${ue.intitule}` : slot.ueId}
@@ -694,14 +710,16 @@ export function AcademicView({
                 Créez vos périodes trimestrielles (T1, T2, T3) et rattachez-les aux matières LMD.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onOpenCreateTrimester}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
-            >
-              <Plus className="w-3.5 h-3.5 text-[#eab33a]" />
-              Nouveau trimestre / Générer T1–T3
-            </button>
+            {canManagePlanningAndTrimesters && (
+              <button
+                type="button"
+                onClick={onOpenCreateTrimester}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-3.5 h-3.5 text-[#eab33a]" />
+                Nouveau trimestre / Générer T1–T3
+              </button>
+            )}
           </div>
 
           {/* Mobile Cards */}
@@ -735,34 +753,36 @@ export function AcademicView({
                     <span className="text-xs text-slate-500">
                       Semestre LMD : <strong className="font-mono">{t.semestreAssocie || '—'}</strong>
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      {!isActive && (
+                    {canManagePlanningAndTrimesters && (
+                      <div className="flex items-center gap-1.5">
+                        {!isActive && (
+                          <button
+                            type="button"
+                            onClick={() => onActivateTrimester(t.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Activer
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => onActivateTrimester(t.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
+                          onClick={() => onEditTrimester(t)}
+                          aria-label={`Modifier ${t.code}`}
+                          className="p-1.5 rounded border border-[#e3e7ef] text-slate-600 hover:text-[#0b1f3f] cursor-pointer"
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Activer
+                          <Edit3 className="w-3.5 h-3.5" />
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => onEditTrimester(t)}
-                        aria-label={`Modifier ${t.code}`}
-                        className="p-1.5 rounded border border-[#e3e7ef] text-slate-600 hover:text-[#0b1f3f] cursor-pointer"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteTrimester(t.id)}
-                        aria-label={`Supprimer ${t.code}`}
-                        className="p-1.5 rounded border border-[#e3e7ef] text-slate-400 hover:text-red-700 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteTrimester(t.id)}
+                          aria-label={`Supprimer ${t.code}`}
+                          className="p-1.5 rounded border border-[#e3e7ef] text-slate-400 hover:text-red-700 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -770,14 +790,16 @@ export function AcademicView({
             {filteredTrimesters.length === 0 && (
               <div className="p-8 text-center text-sm text-slate-500 space-y-3">
                 <p>Aucun trimestre défini pour cette sélection.</p>
-                <button
-                  type="button"
-                  onClick={onOpenCreateTrimester}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Créer les trimestres
-                </button>
+                {canManagePlanningAndTrimesters && (
+                  <button
+                    type="button"
+                    onClick={onOpenCreateTrimester}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Créer les trimestres
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -793,7 +815,9 @@ export function AcademicView({
                   <th className="py-3 px-4">Période (Début → Fin)</th>
                   <th className="py-3 px-4">Semestre LMD</th>
                   <th className="py-3 px-4">Statut</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  {canManagePlanningAndTrimesters && (
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e3e7ef]">
@@ -827,42 +851,47 @@ export function AcademicView({
                           {isActive ? 'En cours (Actif)' : t.statut}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          {!isActive && (
+                      {canManagePlanningAndTrimesters && (
+                        <td className="py-3 px-4 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            {!isActive && (
+                              <button
+                                type="button"
+                                onClick={() => onActivateTrimester(t.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
+                              >
+                                Activer
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => onActivateTrimester(t.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
+                              onClick={() => onEditTrimester(t)}
+                              aria-label={`Modifier ${t.code}`}
+                              className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
                             >
-                              Activer
+                              <Edit3 className="w-3.5 h-3.5" />
                             </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => onEditTrimester(t)}
-                            aria-label={`Modifier ${t.code}`}
-                            className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteTrimester(t.id)}
-                            aria-label={`Supprimer ${t.code}`}
-                            className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteTrimester(t.id)}
+                              aria-label={`Supprimer ${t.code}`}
+                              className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
                 {filteredTrimesters.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-sm text-slate-500">
-                      Aucun trimestre défini pour cette année académique. Cliquez sur « Créer un trimestre » pour générer T1, T2 et T3.
+                    <td
+                      colSpan={canManagePlanningAndTrimesters ? 7 : 6}
+                      className="py-8 text-center text-sm text-slate-500"
+                    >
+                      Aucun trimestre défini pour cette année académique.
                     </td>
                   </tr>
                 )}
@@ -873,7 +902,7 @@ export function AcademicView({
       )}
 
       {/* Add/Edit Filiere Modal */}
-      {filiereModal && (
+      {canManageFilieresAndUes && filiereModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden max-h-[92vh] flex flex-col my-auto">
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">

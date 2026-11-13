@@ -7,6 +7,7 @@ import { OfficialDocumentHeader, PrintModal } from '../PrintModal';
 interface FacultyViewProps {
   state: CerecState;
   campusFilter: Campus | 'Tous';
+  canManageFaculty?: boolean;
   onAddLecturer: (lecturer: Lecturer) => void;
   onUpdateLecturer: (lecturer: Lecturer) => void;
   onDeleteLecturer: (id: string) => void;
@@ -15,6 +16,7 @@ interface FacultyViewProps {
 export function FacultyView({
   state,
   campusFilter,
+  canManageFaculty = true,
   onAddLecturer,
   onUpdateLecturer,
   onDeleteLecturer,
@@ -38,6 +40,7 @@ export function FacultyView({
   );
 
   const openCreate = () => {
+    if (!canManageFaculty) return;
     setEditing(null);
     setForm({
       nom: '',
@@ -53,6 +56,7 @@ export function FacultyView({
   };
 
   const openEdit = (l: Lecturer) => {
+    if (!canManageFaculty) return;
     setEditing(l);
     setForm({ ...l });
     setModalOpen(true);
@@ -60,7 +64,7 @@ export function FacultyView({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nom?.trim()) return;
+    if (!canManageFaculty || !form.nom?.trim()) return;
     const payload: Lecturer = {
       id: editing ? editing.id : `ens-${Date.now()}`,
       nom: form.nom.trim(),
@@ -107,14 +111,16 @@ export function FacultyView({
             <Printer className="w-3.5 h-3.5" />
             État des vacations
           </button>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-[#eab33a]" />
-            Ajouter un enseignant
-          </button>
+          {canManageFaculty && (
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-[#eab33a]" />
+              Ajouter un enseignant
+            </button>
+          )}
         </div>
       </div>
 
@@ -146,32 +152,34 @@ export function FacultyView({
                   <span className="font-mono text-xs text-slate-600 tabular-nums">
                     {l.heuresEffectuees}h × {formatFCFA(l.tauxHoraire)}
                   </span>
-                  <div className="inline-flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleAddHours(l, 2)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] text-xs font-mono font-semibold text-[#0b1f3f] cursor-pointer"
-                    >
-                      <Clock className="w-3 h-3" />
-                      +2h
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openEdit(l)}
-                      aria-label={`Modifier ${l.nom}`}
-                      className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteLecturer(l.id)}
-                      aria-label={`Supprimer ${l.nom}`}
-                      className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {canManageFaculty && (
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleAddHours(l, 2)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] text-xs font-mono font-semibold text-[#0b1f3f] cursor-pointer"
+                      >
+                        <Clock className="w-3 h-3" />
+                        +2h
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(l)}
+                        aria-label={`Modifier ${l.nom}`}
+                        className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteLecturer(l.id)}
+                        aria-label={`Supprimer ${l.nom}`}
+                        className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -188,7 +196,7 @@ export function FacultyView({
                 <th className="py-3 px-4 text-right">Heures eff.</th>
                 <th className="py-3 px-4 text-right">Taux horaire</th>
                 <th className="py-3 px-4 text-right">Décompte FCFA</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                {canManageFaculty && <th className="py-3 px-4 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e3e7ef]">
@@ -220,35 +228,37 @@ export function FacultyView({
                     <td className="py-3 px-4 text-right font-mono font-bold text-[#0b1f3f] tabular-nums">
                       {formatFCFA(l.heuresEffectuees * l.tauxHoraire)}
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleAddHours(l, 2)}
-                          title="Pointer +2h de cours"
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-mono font-semibold text-[#0b1f3f] cursor-pointer"
-                        >
-                          <Clock className="w-3 h-3" />
-                          +2h
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEdit(l)}
-                          aria-label={`Modifier ${l.nom}`}
-                          className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onDeleteLecturer(l.id)}
-                          aria-label={`Supprimer ${l.nom}`}
-                          className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
+                    {canManageFaculty && (
+                      <td className="py-3 px-4 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleAddHours(l, 2)}
+                            title="Pointer +2h de cours"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-mono font-semibold text-[#0b1f3f] cursor-pointer"
+                          >
+                            <Clock className="w-3 h-3" />
+                            +2h
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openEdit(l)}
+                            aria-label={`Modifier ${l.nom}`}
+                            className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteLecturer(l.id)}
+                            aria-label={`Supprimer ${l.nom}`}
+                            className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -258,7 +268,7 @@ export function FacultyView({
       </div>
 
       {/* Add/Edit Lecturer Modal */}
-      {modalOpen && (
+      {canManageFaculty && modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
           <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">

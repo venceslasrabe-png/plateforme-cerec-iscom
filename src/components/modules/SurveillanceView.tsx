@@ -7,6 +7,7 @@ import { OfficialDocumentHeader, PrintModal } from '../PrintModal';
 interface SurveillanceViewProps {
   state: CerecState;
   campusFilter: Campus | 'Tous';
+  canOperateGate?: boolean;
   onAddGateLog: (log: GateLog) => void;
   onMarkExit: (id: string) => void;
   onCloseAllGateLogs: () => void;
@@ -16,6 +17,7 @@ interface SurveillanceViewProps {
 export function SurveillanceView({
   state,
   campusFilter,
+  canOperateGate = true,
   onAddGateLog,
   onMarkExit,
   onCloseAllGateLogs,
@@ -41,6 +43,7 @@ export function SurveillanceView({
 
   const handleBadgeCheckIn = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canOperateGate) return;
     const q = badgeInput.trim().toLowerCase();
     if (!q) return;
 
@@ -96,7 +99,7 @@ export function SurveillanceView({
 
   const handleVisitorSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!visitorName.trim() || !visitorMotif.trim()) return;
+    if (!canOperateGate || !visitorName.trim() || !visitorMotif.trim()) return;
     const now = new Date().toTimeString().slice(0, 5);
     onAddGateLog({
       id: `gt-${Date.now()}`,
@@ -139,7 +142,8 @@ export function SurveillanceView({
       </div>
 
       {/* 2-Column Check-in Panels */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {canOperateGate && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Badge Scanner */}
         <div className="bg-white border border-[#e3e7ef] rounded-lg p-5 space-y-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-[#161e2e]">
@@ -225,6 +229,7 @@ export function SurveillanceView({
           </form>
         </div>
       </div>
+      )}
 
       {/* Live Gate Log Table */}
       <div className="bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
@@ -233,7 +238,7 @@ export function SurveillanceView({
             Main courante de la Guérite ({logs.length} mouvements)
           </h3>
           <div className="flex flex-wrap items-center gap-2">
-            {insideCount > 0 && (
+            {canOperateGate && insideCount > 0 && (
               <button
                 type="button"
                 onClick={onCloseAllGateLogs}
@@ -284,7 +289,7 @@ export function SurveillanceView({
                   {g.heureSortie ? ` · Sortie ${g.heureSortie}` : ''}
                 </span>
                 <div className="inline-flex items-center gap-1.5">
-                  {!g.heureSortie ? (
+                  {canOperateGate && !g.heureSortie ? (
                     <button
                       type="button"
                       onClick={() => onMarkExit(g.id)}
@@ -294,16 +299,20 @@ export function SurveillanceView({
                       Sortie
                     </button>
                   ) : (
-                    <span className="text-xs text-slate-400 mr-1">Clôturé</span>
+                    <span className="text-xs text-slate-400 mr-1">
+                      {g.heureSortie ? 'Clôturé' : 'En campus'}
+                    </span>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => onDeleteGateLog(g.id)}
-                    aria-label={`Supprimer passage ${g.nomComplet}`}
-                    className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {canOperateGate && (
+                    <button
+                      type="button"
+                      onClick={() => onDeleteGateLog(g.id)}
+                      aria-label={`Supprimer passage ${g.nomComplet}`}
+                      className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -319,7 +328,7 @@ export function SurveillanceView({
                 <th className="py-3 px-4">Motif & Campus</th>
                 <th className="py-3 px-4">Entrée / Sortie</th>
                 <th className="py-3 px-4">Statut Accès</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                {canOperateGate && <th className="py-3 px-4 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e3e7ef]">
@@ -352,30 +361,32 @@ export function SurveillanceView({
                       {g.statutAcces}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="inline-flex items-center gap-1.5">
-                      {!g.heureSortie ? (
+                  {canOperateGate && (
+                    <td className="py-3 px-4 text-right">
+                      <div className="inline-flex items-center gap-1.5">
+                        {!g.heureSortie ? (
+                          <button
+                            type="button"
+                            onClick={() => onMarkExit(g.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-medium text-[#0b1f3f] cursor-pointer"
+                          >
+                            <LogOut className="w-3 h-3" />
+                            Sortie
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400 mr-1">Clôturé</span>
+                        )}
                         <button
                           type="button"
-                          onClick={() => onMarkExit(g.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-medium text-[#0b1f3f] cursor-pointer"
+                          onClick={() => onDeleteGateLog(g.id)}
+                          aria-label={`Supprimer passage ${g.nomComplet}`}
+                          className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
                         >
-                          <LogOut className="w-3 h-3" />
-                          Sortie
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      ) : (
-                        <span className="text-xs text-slate-400 mr-1">Clôturé</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => onDeleteGateLog(g.id)}
-                        aria-label={`Supprimer passage ${g.nomComplet}`}
-                        className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

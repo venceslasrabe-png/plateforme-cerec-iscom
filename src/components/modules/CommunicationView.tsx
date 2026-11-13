@@ -1,15 +1,20 @@
 import { CheckCircle2, Edit3, Megaphone, Plus, Trash2, X } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Announcement,
   Campus,
   CerecState,
   MissionTask,
+  UserRole,
 } from '../../types/cerec';
+import { getRoleDefinition } from '../../utils/permissions';
 
 interface CommunicationViewProps {
   state: CerecState;
   campusFilter: Campus | 'Tous';
+  activeRole: UserRole;
+  canPublish?: boolean;
+  canUpdateMissionStatus?: boolean;
   onAddAnnouncement: (ann: Announcement) => void;
   onUpdateAnnouncement: (ann: Announcement) => void;
   onDeleteAnnouncement: (id: string) => void;
@@ -22,6 +27,9 @@ interface CommunicationViewProps {
 export function CommunicationView({
   state,
   campusFilter,
+  activeRole,
+  canPublish = true,
+  canUpdateMissionStatus = true,
   onAddAnnouncement,
   onUpdateAnnouncement,
   onDeleteAnnouncement,
@@ -49,11 +57,27 @@ export function CommunicationView({
     echeance: '2026-11-22',
   });
 
+  const roleDef = getRoleDefinition(activeRole);
+  const assignedService = roleDef.assignedMissionService;
+  const [missionScope, setMissionScope] = useState<'all' | 'mine'>(() =>
+    assignedService && !canPublish ? 'mine' : 'all'
+  );
+
+  useEffect(() => {
+    setMissionScope(assignedService && !canPublish ? 'mine' : 'all');
+  }, [activeRole, assignedService, canPublish]);
+
   const announcements = state.announcements.filter(
     (a) => campusFilter === 'Tous' || a.campus === 'Tous' || a.campus === campusFilter
   );
 
+  const visibleMissions =
+    missionScope === 'mine' && assignedService
+      ? state.missions.filter((m) => m.assigneA === assignedService)
+      : state.missions;
+
   const openCreateAnn = () => {
+    if (!canPublish) return;
     setEditingAnn(null);
     setAnnForm({
       titre: '',
@@ -67,6 +91,7 @@ export function CommunicationView({
   };
 
   const openEditAnn = (ann: Announcement) => {
+    if (!canPublish) return;
     setEditingAnn(ann);
     setAnnForm({ ...ann });
     setAnnModal(true);
@@ -74,7 +99,7 @@ export function CommunicationView({
 
   const handleSaveAnn = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!annForm.titre?.trim() || !annForm.contenu?.trim()) return;
+    if (!canPublish || !annForm.titre?.trim() || !annForm.contenu?.trim()) return;
     const payload: Announcement = {
       id: editingAnn ? editingAnn.id : `ann-${Date.now()}`,
       titre: annForm.titre.trim(),
@@ -94,11 +119,12 @@ export function CommunicationView({
   };
 
   const openCreateTask = () => {
+    if (!canPublish) return;
     setEditingTask(null);
     setTaskForm({
       titre: '',
       description: '',
-      assigneA: 'Service Scolarité & Examens',
+      assigneA: assignedService || 'Service Scolarité & Examens',
       priorite: 'Haute',
       echeance: '2026-11-22',
       statut: 'À faire',
@@ -107,6 +133,7 @@ export function CommunicationView({
   };
 
   const openEditTask = (m: MissionTask) => {
+    if (!canPublish) return;
     setEditingTask(m);
     setTaskForm({ ...m });
     setTaskModal(true);
@@ -114,7 +141,7 @@ export function CommunicationView({
 
   const handleSaveTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!taskForm.titre?.trim()) return;
+    if (!canPublish || !taskForm.titre?.trim()) return;
     const payload: MissionTask = {
       id: editingTask ? editingTask.id : `mis-${Date.now()}`,
       titre: taskForm.titre.trim(),
@@ -143,14 +170,16 @@ export function CommunicationView({
               Notes de service & Diffusions Campus ({announcements.length})
             </h3>
           </div>
-          <button
-            type="button"
-            onClick={openCreateAnn}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0b1f3f] text-white text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5 text-[#eab33a]" />
-            Publier une note
-          </button>
+          {canPublish && (
+            <button
+              type="button"
+              onClick={openCreateAnn}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0b1f3f] text-white text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5 text-[#eab33a]" />
+              Publier une note
+            </button>
+          )}
         </div>
 
         <div className="divide-y divide-[#e3e7ef]">
@@ -170,22 +199,26 @@ export function CommunicationView({
                   >
                     {ann.priorite}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => openEditAnn(ann)}
-                    aria-label={`Modifier ${ann.titre}`}
-                    className="p-1 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteAnnouncement(ann.id)}
-                    aria-label={`Supprimer ${ann.titre}`}
-                    className="p-1 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {canPublish && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openEditAnn(ann)}
+                        aria-label={`Modifier ${ann.titre}`}
+                        className="p-1 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteAnnouncement(ann.id)}
+                        aria-label={`Supprimer ${ann.titre}`}
+                        className="p-1 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <p className="text-sm text-slate-600 leading-relaxed">{ann.contenu}</p>
@@ -203,71 +236,129 @@ export function CommunicationView({
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-[#c58b12] shrink-0" />
             <h3 className="text-sm font-semibold text-[#161e2e]">
-              Missions & Assignations ({state.missions.length})
+              Missions & Assignations ({visibleMissions.length})
             </h3>
           </div>
-          <button
-            type="button"
-            onClick={openCreateTask}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Nouvelle tâche
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {assignedService && (
+              <div className="inline-flex items-center p-0.5 bg-white border border-[#e3e7ef] rounded-lg text-[11px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setMissionScope('mine')}
+                  className={`px-2 py-1 rounded-md cursor-pointer ${
+                    missionScope === 'mine'
+                      ? 'bg-[#0b1f3f] text-white'
+                      : 'text-slate-600 hover:text-[#161e2e]'
+                  }`}
+                >
+                  Mon service
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMissionScope('all')}
+                  className={`px-2 py-1 rounded-md cursor-pointer ${
+                    missionScope === 'all'
+                      ? 'bg-[#0b1f3f] text-white'
+                      : 'text-slate-600 hover:text-[#161e2e]'
+                  }`}
+                >
+                  Toutes
+                </button>
+              </div>
+            )}
+            {canPublish && (
+              <button
+                type="button"
+                onClick={openCreateTask}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Nouvelle tâche
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="divide-y divide-[#e3e7ef]">
-          {state.missions.map((m) => (
-            <div key={m.id} className="p-4 space-y-2.5">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold text-[#161e2e]">{m.titre}</p>
-                <div className="flex items-center gap-1 shrink-0">
-                  <span className="font-mono text-[11px] text-slate-500 tabular-nums mr-1">
-                    {m.echeance}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => openEditTask(m)}
-                    aria-label={`Modifier mission ${m.titre}`}
-                    className="p-1 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteMission(m.id)}
-                    aria-label={`Supprimer mission ${m.titre}`}
-                    className="p-1 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+          {visibleMissions.map((m) => {
+            const canToggleThisMission =
+              canUpdateMissionStatus &&
+              (canPublish || !assignedService || m.assigneA === assignedService);
+            return (
+              <div key={m.id} className="p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-[#161e2e]">{m.titre}</p>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="font-mono text-[11px] text-slate-500 tabular-nums mr-1">
+                      {m.echeance}
+                    </span>
+                    {canPublish && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => openEditTask(m)}
+                          aria-label={`Modifier mission ${m.titre}`}
+                          className="p-1 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteMission(m.id)}
+                          aria-label={`Supprimer mission ${m.titre}`}
+                          className="p-1 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {m.description && (
+                  <p className="text-xs text-slate-600 leading-relaxed">{m.description}</p>
+                )}
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <span className="text-xs text-slate-500">{m.assigneA}</span>
+                  {canToggleThisMission ? (
+                    <select
+                      value={m.statut}
+                      onChange={(e) =>
+                        onUpdateMissionStatus(m.id, e.target.value as MissionTask['statut'])
+                      }
+                      aria-label={`Statut ${m.titre}`}
+                      className="px-2 py-1 text-xs font-medium border border-[#e3e7ef] rounded bg-white text-[#161e2e]"
+                    >
+                      <option value="À faire">À faire</option>
+                      <option value="En cours">En cours</option>
+                      <option value="Terminé">Terminé</option>
+                    </select>
+                  ) : (
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-medium border ${
+                        m.statut === 'Terminé'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : m.statut === 'En cours'
+                          ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : 'bg-slate-50 text-slate-600 border-[#e3e7ef]'
+                      }`}
+                    >
+                      {m.statut}
+                    </span>
+                  )}
                 </div>
               </div>
-              {m.description && (
-                <p className="text-xs text-slate-600 leading-relaxed">{m.description}</p>
-              )}
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <span className="text-xs text-slate-500">{m.assigneA}</span>
-                <select
-                  value={m.statut}
-                  onChange={(e) =>
-                    onUpdateMissionStatus(m.id, e.target.value as MissionTask['statut'])
-                  }
-                  aria-label={`Statut ${m.titre}`}
-                  className="px-2 py-1 text-xs font-medium border border-[#e3e7ef] rounded bg-white text-[#161e2e]"
-                >
-                  <option value="À faire">À faire</option>
-                  <option value="En cours">En cours</option>
-                  <option value="Terminé">Terminé</option>
-                </select>
-              </div>
+            );
+          })}
+          {visibleMissions.length === 0 && (
+            <div className="py-8 px-4 text-center text-xs text-slate-500">
+              Aucune mission assignée à ce service pour le moment.
             </div>
-          ))}
+          )}
         </div>
       </div>
 
       {/* Add/Edit Announcement Modal */}
-      {annModal && (
+      {canPublish && annModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
           <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
@@ -373,7 +464,7 @@ export function CommunicationView({
       )}
 
       {/* Add/Edit Mission Modal */}
-      {taskModal && (
+      {canPublish && taskModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
           <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">

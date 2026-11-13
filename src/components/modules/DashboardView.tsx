@@ -1,23 +1,41 @@
 import {
   ArrowRight,
+  Award,
+  Bell,
   BookOpen,
+  Check,
+  CheckCheck,
+  CheckSquare,
   CreditCard,
+  Download,
+  Eye,
   ShieldAlert,
+  ShieldCheck,
+  UserPlus,
   Users,
 } from 'lucide-react';
 import { Campus, CerecState, ModuleId, UserRole } from '../../types/cerec';
 import {
   computeStudentFinance,
   computeStudentSemesterSummary,
+  exportCerecToExcel,
   formatFCFA,
   getPaymentAcademicYear,
 } from '../../utils/lmd';
+import {
+  canAccessModule,
+  getRoleDefinition,
+  getRolePermissions,
+} from '../../utils/permissions';
 
 interface DashboardViewProps {
   state: CerecState;
   campusFilter: Campus | 'Tous';
   activeRole: UserRole;
   onNavigate: (module: ModuleId) => void;
+  onNotify?: (msg: string) => void;
+  onMarkNotificationRead?: (id: string) => void;
+  onMarkAllNotificationsRead?: () => void;
 }
 
 export function DashboardView({
@@ -25,7 +43,13 @@ export function DashboardView({
   campusFilter,
   activeRole,
   onNavigate,
+  onNotify,
+  onMarkNotificationRead,
+  onMarkAllNotificationsRead,
 }: DashboardViewProps) {
+  const roleDef = getRoleDefinition(activeRole);
+  const perms = getRolePermissions(activeRole);
+
   const activeYear = state.settings.anneeAcademique;
   const students = state.students.filter(
     (s) =>
@@ -41,7 +65,7 @@ export function DashboardView({
     (g) => campusFilter === 'Tous' || g.campus === campusFilter
   );
 
-  // Financial aggregates
+  // Financial aggregates (for roles with financial access)
   let totalExpected = 0;
   let totalCollected = 0;
   let studentsInArrears = 0;
@@ -107,15 +131,19 @@ export function DashboardView({
     .slice(0, 5);
 
   const gateAlerts = gateLogs.filter((g) => g.statutAcces !== 'Autorisé');
+  const activeMissions = state.missions.filter((m) => m.statut !== 'Terminé');
+  const roleMissions = roleDef.assignedMissionService
+    ? activeMissions.filter((m) => m.assigneA === roleDef.assignedMissionService)
+    : activeMissions;
 
-  const roleLabels: Record<UserRole, string> = {
-    admin: 'Vue Direction & Administration Générale',
-    direction: 'Vue Direction Académique & LMD',
-    scolarite: 'Vue Scolarité, Inscriptions & Examens',
-    caisse: 'Vue Caisse Centrale & Recouvrement',
-    enseignant: 'Vue Corps Professoral',
-    surveillance: 'Vue Surveillance & Contrôle Guérite',
-  };
+  const roleNotifications = (state.notifications ?? []).filter(
+    (n) =>
+      n.targetRoles.includes(activeRole) &&
+      (campusFilter === 'Tous' || n.campus === campusFilter)
+  );
+  const unreadNotifications = roleNotifications.filter(
+    (n) => !n.readByRoles.includes(activeRole)
+  );
 
   return (
     <div className="space-y-6">
@@ -123,36 +151,141 @@ export function DashboardView({
       <div className="bg-[#0b1f3f] text-white rounded-lg p-4 sm:p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 sm:gap-6 border border-[#143263]">
         <div className="space-y-1.5 max-w-2xl">
           <p className="text-xs font-medium text-[#eab33a]">
-            {roleLabels[activeRole]} · Année académique {state.settings.anneeAcademique}
+            {roleDef.label}
+            {perms.readOnly ? ' · Lecture seule' : ''} · Année académique{' '}
+            {state.settings.anneeAcademique}
           </p>
           <h2 className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-white">
-            Pilotage Académique & Administratif CEREC-ISCOM
+            {perms.readOnly
+              ? 'Supervision Globale CEREC-ISCOM'
+              : 'Pilotage Académique & Administratif CEREC-ISCOM'}
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed">
-            Suivi consolidé des effectifs LMD, des encaissements FCFA, des délibérations et du contrôle d’accès pour{' '}
-            {campusFilter === 'Tous' ? 'Pointe-Noire et Brazzaville' : `le campus de ${campusFilter}`}.
+            {roleDef.mission} ({campusFilter === 'Tous' ? 'Pointe-Noire & Brazzaville' : `Campus ${campusFilter}`}).
           </p>
         </div>
+
         <div className="flex flex-wrap items-center gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => onNavigate('etu')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            Inscrire un étudiant
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate('fin')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#143263] hover:bg-[#1a3e78] text-white border border-white/15 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            Encaisser un règlement
-          </button>
+          {perms.readOnly ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onNavigate('exam')}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#143263] hover:bg-[#1a3e78] text-white border border-white/15 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5 text-[#eab33a]" />
+                Consulter les délibérations
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  exportCerecToExcel(state, { scope: 'all' });
+                  onNotify?.('Bilan global CEREC-ISCOM (.xlsx) téléchargé.');
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Exporter le bilan (.xlsx)
+              </button>
+            </>
+          ) : (
+            <>
+              {perms.canManageStudents && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('etu')}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  Inscrire un étudiant
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {perms.canCollectPayments && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('fin')}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    perms.canManageStudents
+                      ? 'bg-[#143263] hover:bg-[#1a3e78] text-white border border-white/15'
+                      : 'bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b]'
+                  }`}
+                >
+                  Encaisser un règlement
+                  {!perms.canManageStudents && <ArrowRight className="w-3.5 h-3.5" />}
+                </button>
+              )}
+              {activeRole === 'direction' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('aca')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Structure LMD & Planning
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('exam')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#143263] hover:bg-[#1a3e78] text-white border border-white/15 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Délibérations & Jury
+                  </button>
+                </>
+              )}
+              {activeRole === 'scolarite' && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('exam')}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#143263] hover:bg-[#1a3e78] text-white border border-white/15 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  PV & Relevés LMD
+                </button>
+              )}
+              {activeRole === 'enseignant' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('notes')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Saisir les notes
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('pres')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#143263] hover:bg-[#1a3e78] text-white border border-white/15 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Feuille de présences
+                  </button>
+                </>
+              )}
+              {activeRole === 'surveillance' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('surv')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Contrôle Guérite
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('pres')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#143263] hover:bg-[#1a3e78] text-white border border-white/15 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Feuille de présences
+                  </button>
+                </>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      {/* 4-Column KPI Row */}
+      {/* 4-Column KPI Row tailored to role access */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
@@ -168,152 +301,379 @@ export function DashboardView({
           </p>
         </div>
 
-        <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Recouvrement scolarité</span>
-            <CreditCard className="w-4 h-4 text-[#c58b12]" />
+        {perms.canAccessFinanceData ? (
+          <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Recouvrement scolarité</span>
+              <CreditCard className="w-4 h-4 text-[#c58b12]" />
+            </div>
+            <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
+              {recoveryPct}%
+            </p>
+            <p className="mt-1 text-xs text-slate-500 font-mono tabular-nums">
+              {formatFCFA(totalCollected)} encaissés
+            </p>
           </div>
-          <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
-            {recoveryPct}%
-          </p>
-          <p className="mt-1 text-xs text-slate-500 font-mono tabular-nums">
-            {formatFCFA(totalCollected)} encaissés
-          </p>
-        </div>
+        ) : (
+          <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Maquettes & Filières LMD</span>
+              <BookOpen className="w-4 h-4 text-[#c58b12]" />
+            </div>
+            <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
+              {state.filieres.length}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {state.ues.length} Unités d’Enseignement actives
+            </p>
+          </div>
+        )}
 
-        <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Moyenne & Réussite LMD</span>
-            <BookOpen className="w-4 h-4 text-[#143263]" />
+        {perms.canViewStudentGrades ? (
+          <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Moyenne & Réussite LMD</span>
+              <Award className="w-4 h-4 text-[#143263]" />
+            </div>
+            <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
+              {globalGpa} <span className="text-sm font-normal text-slate-500">/ 20</span>
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {passRate}% de validation · {graded.length} dossiers évalués
+            </p>
           </div>
-          <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
-            {globalGpa} <span className="text-sm font-normal text-slate-500">/ 20</span>
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {passRate}% de validation · {graded.length} dossiers évalués
-          </p>
-        </div>
+        ) : (
+          <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Missions en cours</span>
+              <CheckSquare className="w-4 h-4 text-[#143263]" />
+            </div>
+            <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
+              {roleMissions.length}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {roleDef.assignedMissionService ?? 'Tous services'}
+            </p>
+          </div>
+        )}
 
-        <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Assiduité & Guérite</span>
-            <ShieldAlert className="w-4 h-4 text-amber-600" />
+        {perms.canAccessGateLogs ? (
+          <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Assiduité & Guérite</span>
+              <ShieldAlert className="w-4 h-4 text-amber-600" />
+            </div>
+            <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
+              {attendancePct}%
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {gateLogs.filter((g) => !g.heureSortie).length} présent(s) campus · {gateAlerts.length} alerte(s) accès
+            </p>
           </div>
-          <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
-            {attendancePct}%
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {studentsInArrears} retards financiers · {gateAlerts.length} alerte(s) accès
-          </p>
-        </div>
+        ) : perms.canAccessFinanceData ? (
+          <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Reste à recouvrer</span>
+              <ShieldAlert className="w-4 h-4 text-amber-600" />
+            </div>
+            <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
+              {studentsInArrears}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              dossier(s) en retard critique · {payments.length} reçu(s)
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Assiduité aux cours</span>
+              <ShieldCheck className="w-4 h-4 text-emerald-700" />
+            </div>
+            <p className="mt-2 font-mono text-2xl font-bold text-[#161e2e] tabular-nums">
+              {attendancePct}%
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {todayAtt.length} pointage(s) enregistrés sur la dernière séance
+            </p>
+          </div>
+        )}
       </div>
+
+      {/* Role-Targeted Notifications Panel (Caisse & Directeur Général) */}
+      {roleNotifications.length > 0 && (
+        <div className="bg-white border border-[#e3e7ef] border-t-2 border-t-[#e0a526] rounded-lg p-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#e3e7ef]">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-[#0b1f3f] text-[#eab33a] flex items-center justify-center shrink-0">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-[#161e2e] truncate">
+                  {activeRole === 'caisse'
+                    ? 'Notifications Caisse — Nouvelles inscriptions'
+                    : activeRole === 'dg'
+                    ? 'Alertes Direction Générale — Encaissements & Inscriptions'
+                    : activeRole === 'direction'
+                    ? 'Alertes Direction Académique — Inscriptions & Encaissements'
+                    : 'Notifications du service'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {unreadNotifications.length > 0
+                    ? `${unreadNotifications.length} notification(s) non lue(s)`
+                    : 'Toutes les notifications sont consultées'}
+                </p>
+              </div>
+            </div>
+            {unreadNotifications.length > 0 && onMarkAllNotificationsRead && (
+              <button
+                type="button"
+                onClick={onMarkAllNotificationsRead}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-semibold text-[#0b1f3f] cursor-pointer"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+                Tout marquer lu
+              </button>
+            )}
+          </div>
+
+          <div className="divide-y divide-[#e3e7ef]">
+            {roleNotifications.slice(0, 5).map((n) => {
+              const isUnread = !n.readByRoles.includes(activeRole);
+              const isInscription = n.category === 'inscription';
+              return (
+                <div
+                  key={n.id}
+                  className={`py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    isUnread ? 'bg-[#fffcf5]/70 px-2.5 -mx-2.5 rounded-md' : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div
+                      className={`w-7 h-7 rounded-md border flex items-center justify-center shrink-0 mt-0.5 ${
+                        isInscription
+                          ? 'bg-[#eef2f9] border-[#0b1f3f]/15 text-[#0b1f3f]'
+                          : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      }`}
+                    >
+                      {isInscription ? (
+                        <UserPlus className="w-3.5 h-3.5" />
+                      ) : (
+                        <CreditCard className="w-3.5 h-3.5" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-[#0b1f3f] truncate">
+                          {n.title}
+                        </p>
+                        {isUnread && (
+                          <span className="px-1.5 py-0.5 rounded bg-[#fff4d6] border border-[#e0a526]/40 text-[10px] font-semibold text-[#6b4e07] shrink-0">
+                            Nouveau
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">{n.message}</p>
+                      <p className="text-[11px] font-mono text-slate-400 mt-0.5 tabular-nums">
+                        {n.campus} · {n.actorName} · {n.createdAt.slice(0, 16).replace('T', ' ')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 sm:ml-4">
+                    {n.targetModule && canAccessModule(activeRole, n.targetModule) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isUnread) onMarkNotificationRead?.(n.id);
+                          onNavigate(n.targetModule!);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+                      >
+                        {n.targetModule === 'fin' ? 'Ouvrir Caisse' : 'Consulter'}
+                      </button>
+                    )}
+                    {isUnread && onMarkNotificationRead && (
+                      <button
+                        type="button"
+                        onClick={() => onMarkNotificationRead(n.id)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-medium text-[#0b1f3f] cursor-pointer whitespace-nowrap"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Marquer lu
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Main 2-Column Operational Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left: Filières & Recouvrement */}
+        {/* Left: Filières */}
         <div className="lg:col-span-7 bg-white border border-[#e3e7ef] rounded-lg p-5">
           <div className="flex items-center justify-between gap-4 pb-4 border-b border-[#e3e7ef]">
             <div>
               <h3 className="text-sm font-semibold text-[#161e2e]">
-                Répartition par Filière & Taux de Recouvrement
+                {perms.canAccessFinanceData
+                  ? 'Répartition par Filière & Taux de Recouvrement'
+                  : 'Répartition des Effectifs par Filière LMD'}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Effectifs inscrits et progression des paiements par parcours LMD
+                {perms.canAccessFinanceData
+                  ? 'Effectifs inscrits et progression des paiements par parcours LMD'
+                  : 'Effectifs inscrits par cycle et parcours de formation'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => onNavigate('aca')}
-              className="text-xs font-semibold text-[#0e2447] hover:text-[#c58b12] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              Voir les maquettes
-            </button>
+            {canAccessModule(activeRole, 'aca') && (
+              <button
+                type="button"
+                onClick={() => onNavigate('aca')}
+                className="text-xs font-semibold text-[#0e2447] hover:text-[#c58b12] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                Voir les maquettes
+              </button>
+            )}
           </div>
 
           <div className="divide-y divide-[#e3e7ef] mt-2">
-            {filiereStats.map((f) => (
-              <div key={f.id} className="py-3.5 space-y-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4 text-sm">
-                  <div className="min-w-0">
-                    <span className="font-mono text-xs font-semibold text-[#0b1f3f] mr-2">
-                      {f.code}
-                    </span>
-                    <span className="font-medium text-[#161e2e]">{f.nom}</span>
-                    <span className="text-xs text-slate-500 ml-2">· {f.cycle}</span>
+            {filiereStats.map((f) => {
+              const barPct = perms.canAccessFinanceData
+                ? f.pct
+                : students.length > 0
+                ? Math.round((f.count / students.length) * 100)
+                : 0;
+              return (
+                <div key={f.id} className="py-3.5 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-mono text-xs font-semibold text-[#0b1f3f] mr-2">
+                        {f.code}
+                      </span>
+                      <span className="font-medium text-[#161e2e]">{f.nom}</span>
+                      <span className="text-xs text-slate-500 ml-2">· {f.cycle}</span>
+                    </div>
+                    <div className="flex items-center gap-4 shrink-0 text-xs font-mono tabular-nums">
+                      <span className="text-slate-600">{f.count} étud.</span>
+                      <span className="font-semibold text-[#0b1f3f]">{barPct}%</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4 shrink-0 text-xs font-mono tabular-nums">
-                    <span className="text-slate-600">{f.count} étud.</span>
-                    <span className="font-semibold text-[#0b1f3f]">{f.pct}%</span>
+                  <div className="h-2 w-full bg-slate-100 rounded overflow-hidden">
+                    <div
+                      className="h-full bg-[#0e2447] transition-all duration-300"
+                      style={{ width: `${Math.max(barPct, 4)}%` }}
+                    />
                   </div>
                 </div>
-                <div className="h-2 w-full bg-slate-100 rounded overflow-hidden">
-                  <div
-                    className="h-full bg-[#0e2447] transition-all duration-300"
-                    style={{ width: `${Math.max(f.pct, 4)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
-        {/* Right: Derniers Encaissements & Notes de service */}
+        {/* Right: Mission-scoped operational widget & Notes de service */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
-            <div className="flex items-center justify-between gap-4 pb-3 border-b border-[#e3e7ef]">
-              <h3 className="text-sm font-semibold text-[#161e2e]">
-                Derniers Encaissements Caisse
-              </h3>
-              <button
-                type="button"
-                onClick={() => onNavigate('fin')}
-                className="text-xs font-semibold text-[#0e2447] hover:text-[#c58b12] whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                Journal complet
-              </button>
-            </div>
-            <div className="divide-y divide-[#e3e7ef] mt-1">
-              {recentPayments.map((p) => {
-                const st = state.students.find((s) => s.id === p.studentId);
-                return (
-                  <div
-                    key={p.id}
-                    className="py-2.5 flex items-center justify-between gap-3 text-xs"
+          {perms.canAccessFinanceData ? (
+            <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
+              <div className="flex items-center justify-between gap-4 pb-3 border-b border-[#e3e7ef]">
+                <h3 className="text-sm font-semibold text-[#161e2e]">
+                  Derniers Encaissements Caisse
+                </h3>
+                {canAccessModule(activeRole, 'fin') && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('fin')}
+                    className="text-xs font-semibold text-[#0e2447] hover:text-[#c58b12] whitespace-nowrap shrink-0 cursor-pointer"
                   >
-                    <div className="min-w-0">
-                      <p className="font-medium text-[#161e2e] truncate">
-                        {st ? `${st.nom} ${st.prenom}` : p.studentId}
-                      </p>
-                      <p className="text-slate-500 mt-0.5 truncate">
-                        {p.motif} · {p.mode} · {p.date}
-                      </p>
+                    Journal complet
+                  </button>
+                )}
+              </div>
+              <div className="divide-y divide-[#e3e7ef] mt-1">
+                {recentPayments.map((p) => {
+                  const st = state.students.find((s) => s.id === p.studentId);
+                  return (
+                    <div
+                      key={p.id}
+                      className="py-2.5 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-[#161e2e] truncate">
+                          {st ? `${st.nom} ${st.prenom}` : p.studentId}
+                        </p>
+                        <p className="text-slate-500 mt-0.5 truncate">
+                          {p.motif} · {p.mode} · {p.date}
+                        </p>
+                      </div>
+                      <span className="font-mono font-semibold text-emerald-700 tabular-nums shrink-0">
+                        +{formatFCFA(p.montant)}
+                      </span>
                     </div>
-                    <span className="font-mono font-semibold text-emerald-700 tabular-nums shrink-0">
-                      +{formatFCFA(p.montant)}
-                    </span>
-                  </div>
-                );
-              })}
-              {recentPayments.length === 0 && (
-                <p className="py-4 text-xs text-slate-500 text-center">
-                  Aucun encaissement enregistré pour ce campus.
-                </p>
-              )}
+                  );
+                })}
+                {recentPayments.length === 0 && (
+                  <p className="py-4 text-xs text-slate-500 text-center">
+                    Aucun encaissement enregistré pour ce campus.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
+              <div className="flex items-center justify-between gap-4 pb-3 border-b border-[#e3e7ef]">
+                <h3 className="text-sm font-semibold text-[#161e2e]">
+                  Missions & Priorités du Service
+                </h3>
+                {canAccessModule(activeRole, 'com') && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('com')}
+                    className="text-xs font-semibold text-[#0e2447] hover:text-[#c58b12] whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Voir les missions
+                  </button>
+                )}
+              </div>
+              <div className="divide-y divide-[#e3e7ef] mt-1">
+                {roleMissions.slice(0, 4).map((m) => (
+                  <div key={m.id} className="py-2.5 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-[#161e2e] line-clamp-1">
+                        {m.titre}
+                      </p>
+                      <span className="font-mono text-[11px] text-slate-500 tabular-nums shrink-0">
+                        {m.echeance}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {m.assigneA} · {m.statut}
+                    </p>
+                  </div>
+                ))}
+                {roleMissions.length === 0 && (
+                  <p className="py-4 text-xs text-slate-500 text-center">
+                    Aucune mission ouverte pour ce service.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="bg-white border border-[#e3e7ef] rounded-lg p-5">
             <div className="flex items-center justify-between gap-4 pb-3 border-b border-[#e3e7ef]">
               <h3 className="text-sm font-semibold text-[#161e2e]">
                 Notes de service & Alertes
               </h3>
-              <button
-                type="button"
-                onClick={() => onNavigate('com')}
-                className="text-xs font-semibold text-[#0e2447] hover:text-[#c58b12] whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                Diffusions
-              </button>
+              {canAccessModule(activeRole, 'com') && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('com')}
+                  className="text-xs font-semibold text-[#0e2447] hover:text-[#c58b12] whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  Diffusions
+                </button>
+              )}
             </div>
             <div className="divide-y divide-[#e3e7ef] mt-1">
               {state.announcements.slice(0, 3).map((ann) => (

@@ -1,4 +1,4 @@
-import { Bell, Plus, Printer, Search, Trash2, X } from 'lucide-react';
+import { Bell, Check, CreditCard, Download, Plus, Printer, Search, Trash2, UserPlus, X } from 'lucide-react';
 import React, { useState } from 'react';
 import {
   Campus,
@@ -6,20 +6,25 @@ import {
   Payment,
   PaymentMode,
   PaymentMotif,
+  UserRole,
 } from '../../types/cerec';
 import {
   computeStudentFinance,
   formatFCFA,
   getPaymentAcademicYear,
 } from '../../utils/lmd';
+import { downloadRecuPaiementPdf } from '../../utils/recuInscriptionPdf';
 import { OfficialDocumentHeader, PrintModal } from '../PrintModal';
 import { QrCodeSvg } from '../QrCodeSvg';
 
 interface FinanceViewProps {
   state: CerecState;
   campusFilter: Campus | 'Tous';
+  activeRole?: UserRole;
+  canCollectPayments?: boolean;
   onAddPayment: (payment: Payment) => void;
   onDeletePayment: (id: string) => void;
+  onMarkNotificationRead?: (id: string) => void;
   onNotify: (msg: string) => void;
 }
 
@@ -42,8 +47,11 @@ const MODES: PaymentMode[] = [
 export function FinanceView({
   state,
   campusFilter,
+  activeRole = 'caisse',
+  canCollectPayments = true,
   onAddPayment,
   onDeletePayment,
+  onMarkNotificationRead,
   onNotify,
 }: FinanceViewProps) {
   const [subTab, setSubTab] = useState<'journal' | 'soldes'>('journal');
@@ -104,6 +112,7 @@ export function FinanceView({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCollectPayments) return;
     const st = state.students.find((s) => s.id === form.studentId);
     if (!st || form.montant <= 0) return;
 
@@ -125,10 +134,93 @@ export function FinanceView({
     onAddPayment(nextPayment);
     setModalOpen(false);
     setReceipt(nextPayment);
+    void downloadRecuPaiementPdf(nextPayment, state).then((fileName) => {
+      onNotify(`Reçu PDF téléchargé : ${fileName}`);
+    });
   };
+
+  const unreadFinNotifications = (state.notifications ?? []).filter(
+    (n) =>
+      n.targetRoles.includes(activeRole) &&
+      !n.readByRoles.includes(activeRole) &&
+      (campusFilter === 'Tous' || n.campus === campusFilter)
+  );
 
   return (
     <div className="space-y-5">
+      {unreadFinNotifications.length > 0 && (
+        <div className="bg-white border border-[#e3e7ef] border-t-2 border-t-[#e0a526] rounded-lg p-4 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-[#c58b12]" />
+              <h3 className="text-xs font-bold text-[#0b1f3f] uppercase tracking-wider">
+                {activeRole === 'dg'
+                  ? `Notifications Direction Générale (${unreadFinNotifications.length})`
+                  : `Nouvelles inscriptions à encaisser (${unreadFinNotifications.length})`}
+              </h3>
+            </div>
+          </div>
+          <div className="divide-y divide-[#e3e7ef]">
+            {unreadFinNotifications.slice(0, 4).map((n) => {
+              const relatedStudent = n.relatedStudentId
+                ? state.students.find((s) => s.id === n.relatedStudentId)
+                : undefined;
+              const relatedFiliere = relatedStudent
+                ? state.filieres.find((f) => f.code === relatedStudent.filiereCode)
+                : undefined;
+              return (
+                <div
+                  key={n.id}
+                  className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    {n.category === 'inscription' ? (
+                      <UserPlus className="w-4 h-4 text-[#0b1f3f] shrink-0 mt-0.5" />
+                    ) : (
+                      <CreditCard className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-[#0b1f3f]">{n.title}</p>
+                      <p className="text-xs text-slate-600">{n.message}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {canCollectPayments && relatedStudent && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            studentId: relatedStudent.id,
+                            motif: 'Inscription',
+                            montant: relatedFiliere?.fraisInscription ?? 75000,
+                          }));
+                          onMarkNotificationRead?.(n.id);
+                          setModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer whitespace-nowrap"
+                      >
+                        Encaisser inscription
+                      </button>
+                    )}
+                    {onMarkNotificationRead && (
+                      <button
+                        type="button"
+                        onClick={() => onMarkNotificationRead(n.id)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-medium text-[#0b1f3f] cursor-pointer whitespace-nowrap"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Marquer lu
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Financial KPI Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white border border-[#e3e7ef] rounded-lg p-4">
@@ -200,20 +292,22 @@ export function FinanceView({
             <Printer className="w-3.5 h-3.5" />
             État recouvrement
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setForm((prev) => ({
-                ...prev,
-                studentId: students[0]?.id ?? state.students[0]?.id ?? '',
-              }));
-              setModalOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Nouvel encaissement
-          </button>
+          {canCollectPayments && (
+            <button
+              type="button"
+              onClick={() => {
+                setForm((prev) => ({
+                  ...prev,
+                  studentId: students[0]?.id ?? state.students[0]?.id ?? '',
+                }));
+                setModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              Nouvel encaissement
+            </button>
+          )}
         </div>
       </div>
 
@@ -256,12 +350,25 @@ export function FinanceView({
                       </button>
                       <button
                         type="button"
-                        onClick={() => onDeletePayment(p.id)}
-                        aria-label={`Annuler ${p.numeroRecu}`}
-                        className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                        onClick={async () => {
+                          const fileName = await downloadRecuPaiementPdf(p, state);
+                          onNotify(`Reçu PDF téléchargé : ${fileName}`);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Download className="w-3.5 h-3.5" />
+                        PDF
                       </button>
+                      {canCollectPayments && (
+                        <button
+                          type="button"
+                          onClick={() => onDeletePayment(p.id)}
+                          aria-label={`Annuler ${p.numeroRecu}`}
+                          className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -323,13 +430,27 @@ export function FinanceView({
                           </button>
                           <button
                             type="button"
-                            onClick={() => onDeletePayment(p.id)}
-                            aria-label={`Annuler ${p.numeroRecu}`}
-                            title="Annuler ce reçu"
-                            className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                            onClick={async () => {
+                              const fileName = await downloadRecuPaiementPdf(p, state);
+                              onNotify(`Reçu PDF téléchargé : ${fileName}`);
+                            }}
+                            title="Télécharger ce reçu en PDF"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Download className="w-3.5 h-3.5" />
+                            PDF
                           </button>
+                          {canCollectPayments && (
+                            <button
+                              type="button"
+                              onClick={() => onDeletePayment(p.id)}
+                              aria-label={`Annuler ${p.numeroRecu}`}
+                              title="Annuler ce reçu"
+                              className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -384,7 +505,7 @@ export function FinanceView({
                       <span className="font-semibold text-[#161e2e]">{formatFCFA(fin.resteAPayer)}</span>
                     </div>
                   </div>
-                  {fin.resteAPayer > 0 && (
+                  {canCollectPayments && fin.resteAPayer > 0 && (
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
                         type="button"
@@ -429,7 +550,7 @@ export function FinanceView({
                   <th className="py-3 px-4 text-right">Payé</th>
                   <th className="py-3 px-4 text-right">Reste</th>
                   <th className="py-3 px-4">Statut</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  {canCollectPayments && <th className="py-3 px-4 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e3e7ef]">
@@ -470,39 +591,41 @@ export function FinanceView({
                           {fin.statutFinancier} ({fin.tauxCouverture}%)
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        {fin.resteAPayer > 0 && (
-                          <div className="inline-flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onNotify(
-                                  `Relance préparée pour ${s.tuteurNom} (${s.tuteurTel || s.telephone}) : solde dû ${formatFCFA(fin.resteAPayer)}.`
-                                )
-                              }
-                              title="Relancer le tuteur"
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-medium text-[#0b1f3f] cursor-pointer"
-                            >
-                              <Bell className="w-3 h-3" />
-                              Relancer
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setForm((prev) => ({
-                                  ...prev,
-                                  studentId: s.id,
-                                  montant: Math.min(150000, fin.resteAPayer),
-                                }));
-                                setModalOpen(true);
-                              }}
-                              className="px-2.5 py-1 rounded bg-[#0b1f3f] text-white text-xs font-medium cursor-pointer"
-                            >
-                              Encaisser
-                            </button>
-                          </div>
-                        )}
-                      </td>
+                      {canCollectPayments && (
+                        <td className="py-3 px-4 text-right">
+                          {fin.resteAPayer > 0 && (
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onNotify(
+                                    `Relance préparée pour ${s.tuteurNom} (${s.tuteurTel || s.telephone}) : solde dû ${formatFCFA(fin.resteAPayer)}.`
+                                  )
+                                }
+                                title="Relancer le tuteur"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-medium text-[#0b1f3f] cursor-pointer"
+                              >
+                                <Bell className="w-3 h-3" />
+                                Relancer
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    studentId: s.id,
+                                    montant: Math.min(150000, fin.resteAPayer),
+                                  }));
+                                  setModalOpen(true);
+                                }}
+                                className="px-2.5 py-1 rounded bg-[#0b1f3f] text-white text-xs font-medium cursor-pointer"
+                              >
+                                Encaisser
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -513,7 +636,7 @@ export function FinanceView({
       )}
 
       {/* Record Payment Modal */}
-      {modalOpen && (
+      {canCollectPayments && modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
           <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
@@ -653,6 +776,12 @@ export function FinanceView({
         <PrintModal
           title={`Reçu Officiel de Caisse — ${receipt.numeroRecu}`}
           subtitle={`${receipt.campus} · ${receipt.date}`}
+          printLabel="Imprimer le reçu"
+          pdfButtonLabel="Télécharger Reçu (PDF)"
+          onDownloadPdf={async () => {
+            const fileName = await downloadRecuPaiementPdf(receipt, state);
+            onNotify(`Reçu PDF téléchargé : ${fileName}`);
+          }}
           onClose={() => setReceipt(null)}
         >
           {(() => {

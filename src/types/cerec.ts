@@ -5,6 +5,7 @@ export type Cycle = 'BTS' | 'Licence' | 'Master' | 'Qualifiant';
 export type Niveau = 'L1' | 'L2' | 'L3' | 'M1' | 'M2' | 'FQ';
 
 export type UserRole =
+  | 'dg'
   | 'admin'
   | 'direction'
   | 'scolarite'
@@ -63,6 +64,16 @@ export interface Student {
   email: string;
   tuteurNom: string;
   tuteurTel: string;
+  parentLien?: string;
+  parentProfession?: string;
+  parentAdresse?: string;
+  parentEmail?: string;
+  garantNom?: string;
+  garantLien?: string;
+  garantTel?: string;
+  garantProfession?: string;
+  garantAdresse?: string;
+  garantCni?: string;
   campus: Campus;
   filiereCode: string;
   option?: string;
@@ -205,6 +216,25 @@ export interface LmdSettings {
   seuilBlocagePortailPct: number; // e.g. 25% minimum paid
 }
 
+export type NotificationCategory = 'inscription' | 'encaissement';
+
+export interface SystemNotification {
+  id: string;
+  category: NotificationCategory;
+  title: string;
+  message: string;
+  targetRoles: UserRole[];
+  campus: Campus;
+  targetModule?: ModuleId;
+  relatedStudentId?: string;
+  relatedPaymentId?: string;
+  amountFCFA?: number;
+  createdAt: string;
+  actorRole: UserRole;
+  actorName: string;
+  readByRoles: UserRole[];
+}
+
 export interface CerecState {
   filieres: Filiere[];
   ues: UE[];
@@ -220,4 +250,5 @@ export interface CerecState {
   settings: LmdSettings;
   academicYears?: string[];
   trimestres?: Trimester[];
+  notifications?: SystemNotification[];
 }

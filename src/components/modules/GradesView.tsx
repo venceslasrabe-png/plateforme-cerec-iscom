@@ -29,6 +29,7 @@ import { OfficialDocumentHeader, PrintModal } from '../PrintModal';
 interface GradesViewProps {
   state: CerecState;
   campusFilter: Campus | 'Tous';
+  canEditGrades?: boolean;
   onUpsertGrade: (grade: GradeRecord) => void;
   onBulkUpsertGrades: (records: GradeRecord[]) => void;
   onDeleteGrade: (studentId: string, ueId: string) => void;
@@ -38,6 +39,7 @@ interface GradesViewProps {
 export function GradesView({
   state,
   campusFilter,
+  canEditGrades = true,
   onUpsertGrade,
   onBulkUpsertGrades,
   onDeleteGrade,
@@ -68,7 +70,7 @@ export function GradesView({
     field: 'cc' | 'td' | 'tp' | 'examen' | 'rattrapage',
     raw: string
   ) => {
-    if (!selectedUe) return;
+    if (!canEditGrades || !selectedUe) return;
     const existing = state.grades.find(
       (g) => g.studentId === studentId && g.ueId === selectedUe.id
     );
@@ -141,39 +143,43 @@ export function GradesView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={handleImportFile}
-            className="hidden"
-            aria-label="Importer un relevé de notes Excel ou CSV"
-          />
-          <button
-            type="button"
-            disabled={importing}
-            onClick={() => {
-              setImportError(null);
-              fileInputRef.current?.click();
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b1f3f] bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-semibold text-[#0b1f3f] cursor-pointer whitespace-nowrap"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            {importing ? 'Analyse…' : 'Importer relevé de notes'}
-          </button>
-          {selectedUe && (
-            <button
-              type="button"
-              onClick={() => {
-                exportGradesTemplateToExcel(state, selectedUe, classStudents);
-                onNotify(`Modèle Excel ${selectedUe.code} téléchargé.`);
-              }}
-              title="Télécharger le modèle Excel pré-rempli pour cette matière"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-semibold text-slate-700 cursor-pointer whitespace-nowrap"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Modèle (.xlsx)
-            </button>
+          {canEditGrades && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleImportFile}
+                className="hidden"
+                aria-label="Importer un relevé de notes Excel ou CSV"
+              />
+              <button
+                type="button"
+                disabled={importing}
+                onClick={() => {
+                  setImportError(null);
+                  fileInputRef.current?.click();
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[#0b1f3f] bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-semibold text-[#0b1f3f] cursor-pointer whitespace-nowrap"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                {importing ? 'Analyse…' : 'Importer relevé de notes'}
+              </button>
+              {selectedUe && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportGradesTemplateToExcel(state, selectedUe, classStudents);
+                    onNotify(`Modèle Excel ${selectedUe.code} téléchargé.`);
+                  }}
+                  title="Télécharger le modèle Excel pré-rempli pour cette matière"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#e3e7ef] hover:border-[#0b1f3f] text-xs font-semibold text-slate-700 cursor-pointer whitespace-nowrap"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Modèle (.xlsx)
+                </button>
+              )}
+            </>
           )}
           <button
             type="button"
@@ -199,18 +205,20 @@ export function GradesView({
             <Printer className="w-3.5 h-3.5" />
             Imprimer la grille
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              onNotify(
-                `Notes de ${selectedUe?.code ?? 'la matière'} validées et enregistrées.`
-              )
-            }
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-[#eab33a]" />
-            Valider la saisie
-          </button>
+          {canEditGrades && (
+            <button
+              type="button"
+              onClick={() =>
+                onNotify(
+                  `Notes de ${selectedUe?.code ?? 'la matière'} validées et enregistrées.`
+                )
+              }
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold cursor-pointer whitespace-nowrap"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#eab33a]" />
+              Valider la saisie
+            </button>
+          )}
         </div>
       </div>
 
@@ -294,9 +302,12 @@ export function GradesView({
                       step="0.25"
                       min={0}
                       max={20}
+                      readOnly={!canEditGrades}
+                      disabled={!canEditGrades}
+                      placeholder="—"
                       value={grade?.cc ?? ''}
                       onChange={(e) => handleGradeChange(s.id, 'cc', e.target.value)}
-                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded tabular-nums"
+                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded disabled:bg-[#f8f9fb] disabled:text-[#161e2e] tabular-nums"
                     />
                   </div>
                   <div>
@@ -308,10 +319,12 @@ export function GradesView({
                       step="0.25"
                       min={0}
                       max={20}
+                      readOnly={!canEditGrades}
+                      disabled={!canEditGrades}
                       placeholder="—"
                       value={grade?.td ?? ''}
                       onChange={(e) => handleGradeChange(s.id, 'td', e.target.value)}
-                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded tabular-nums"
+                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded disabled:bg-[#f8f9fb] disabled:text-[#161e2e] tabular-nums"
                     />
                   </div>
                   <div>
@@ -323,10 +336,12 @@ export function GradesView({
                       step="0.25"
                       min={0}
                       max={20}
+                      readOnly={!canEditGrades}
+                      disabled={!canEditGrades}
                       placeholder="—"
                       value={grade?.tp ?? ''}
                       onChange={(e) => handleGradeChange(s.id, 'tp', e.target.value)}
-                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded tabular-nums"
+                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded disabled:bg-[#f8f9fb] disabled:text-[#161e2e] tabular-nums"
                     />
                   </div>
                   <div>
@@ -338,9 +353,12 @@ export function GradesView({
                       step="0.25"
                       min={0}
                       max={20}
+                      readOnly={!canEditGrades}
+                      disabled={!canEditGrades}
+                      placeholder="—"
                       value={grade?.examen ?? ''}
                       onChange={(e) => handleGradeChange(s.id, 'examen', e.target.value)}
-                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded tabular-nums"
+                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded disabled:bg-[#f8f9fb] disabled:text-[#161e2e] tabular-nums"
                     />
                   </div>
                   <div>
@@ -352,11 +370,12 @@ export function GradesView({
                       step="0.25"
                       min={0}
                       max={20}
-                      disabled={!needsRat && grade?.rattrapage == null}
-                      placeholder={needsRat ? 'Saisir' : '—'}
+                      readOnly={!canEditGrades}
+                      disabled={!canEditGrades || (!needsRat && grade?.rattrapage == null)}
+                      placeholder={canEditGrades && needsRat ? 'Saisir' : '—'}
                       value={grade?.rattrapage ?? ''}
                       onChange={(e) => handleGradeChange(s.id, 'rattrapage', e.target.value)}
-                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded disabled:bg-slate-50 disabled:text-slate-400 tabular-nums"
+                      className="w-full px-2 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded disabled:bg-slate-50 disabled:text-slate-600 tabular-nums"
                     />
                   </div>
                   <div className="flex flex-col justify-end">
@@ -396,7 +415,7 @@ export function GradesView({
                     <Printer className="w-3.5 h-3.5" />
                     Relevé
                   </button>
-                  {grade && selectedUe && (
+                  {canEditGrades && grade && selectedUe && (
                     <button
                       type="button"
                       onClick={() => onDeleteGrade(s.id, selectedUe.id)}
@@ -461,10 +480,13 @@ export function GradesView({
                         step="0.25"
                         min={0}
                         max={20}
+                        readOnly={!canEditGrades}
+                        disabled={!canEditGrades}
+                        placeholder="—"
                         value={grade?.cc ?? ''}
                         onChange={(e) => handleGradeChange(s.id, 'cc', e.target.value)}
                         aria-label={`Note Classe ${s.nom}`}
-                        className="w-16 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] tabular-nums"
+                        className="w-16 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] disabled:bg-[#f8f9fb] disabled:text-[#161e2e] tabular-nums"
                       />
                     </td>
                     <td className="py-2.5 px-1.5 text-center">
@@ -473,11 +495,13 @@ export function GradesView({
                         step="0.25"
                         min={0}
                         max={20}
+                        readOnly={!canEditGrades}
+                        disabled={!canEditGrades}
                         value={grade?.td ?? ''}
                         onChange={(e) => handleGradeChange(s.id, 'td', e.target.value)}
                         aria-label={`Note TD ${s.nom}`}
                         placeholder="—"
-                        className="w-14 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] tabular-nums"
+                        className="w-14 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] disabled:bg-[#f8f9fb] disabled:text-[#161e2e] tabular-nums"
                       />
                     </td>
                     <td className="py-2.5 px-1.5 text-center">
@@ -486,11 +510,13 @@ export function GradesView({
                         step="0.25"
                         min={0}
                         max={20}
+                        readOnly={!canEditGrades}
+                        disabled={!canEditGrades}
                         value={grade?.tp ?? ''}
                         onChange={(e) => handleGradeChange(s.id, 'tp', e.target.value)}
                         aria-label={`Note TP ${s.nom}`}
                         placeholder="—"
-                        className="w-14 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] tabular-nums"
+                        className="w-14 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] disabled:bg-[#f8f9fb] disabled:text-[#161e2e] tabular-nums"
                       />
                     </td>
                     <td className="py-2.5 px-2 text-right font-mono text-xs text-slate-600 tabular-nums">
@@ -502,10 +528,13 @@ export function GradesView({
                         step="0.25"
                         min={0}
                         max={20}
+                        readOnly={!canEditGrades}
+                        disabled={!canEditGrades}
+                        placeholder="—"
                         value={grade?.examen ?? ''}
                         onChange={(e) => handleGradeChange(s.id, 'examen', e.target.value)}
                         aria-label={`Note Examen ${s.nom}`}
-                        className="w-16 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] tabular-nums"
+                        className="w-16 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] disabled:bg-[#f8f9fb] disabled:text-[#161e2e] tabular-nums"
                       />
                     </td>
                     <td className="py-2.5 px-1.5 text-center">
@@ -514,12 +543,13 @@ export function GradesView({
                         step="0.25"
                         min={0}
                         max={20}
-                        disabled={!needsRat && grade?.rattrapage == null}
+                        readOnly={!canEditGrades}
+                        disabled={!canEditGrades || (!needsRat && grade?.rattrapage == null)}
                         value={grade?.rattrapage ?? ''}
                         onChange={(e) => handleGradeChange(s.id, 'rattrapage', e.target.value)}
                         aria-label={`Note Rattrapage ${s.nom}`}
-                        placeholder={needsRat ? 'Saisir' : '—'}
-                        className="w-16 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] disabled:bg-slate-50 disabled:text-slate-400 tabular-nums"
+                        placeholder={canEditGrades && needsRat ? 'Saisir' : '—'}
+                        className="w-16 px-1.5 py-1.5 text-center font-mono text-xs border border-[#e3e7ef] rounded focus:outline-none focus:border-[#0b1f3f] disabled:bg-slate-50 disabled:text-slate-600 tabular-nums"
                       />
                     </td>
                     <td className="py-2.5 px-3 text-right font-mono font-bold text-[#161e2e] tabular-nums">
@@ -570,7 +600,7 @@ export function GradesView({
                           <Printer className="w-3.5 h-3.5" />
                           Relevé
                         </button>
-                        {grade && selectedUe && (
+                        {canEditGrades && grade && selectedUe && (
                           <button
                             type="button"
                             onClick={() => onDeleteGrade(s.id, selectedUe.id)}
@@ -765,7 +795,7 @@ export function GradesView({
         </PrintModal>
       )}
 
-      {importPreview && (
+      {canEditGrades && importPreview && (
         <ImportGradesModal
           result={importPreview}
           onCancel={() => setImportPreview(null)}
