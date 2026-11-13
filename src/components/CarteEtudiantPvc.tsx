@@ -57,8 +57,8 @@ export function CarteEtudiantPvc({
             </div>
 
             {/* Photo + Academic Metadata Split */}
-            <div className="grid grid-cols-[120px_1fr] gap-3.5 items-stretch">
-              <div className="w-[120px] h-[146px] rounded-md border border-[#e3e7ef] bg-[#f8f9fb] overflow-hidden flex flex-col items-center justify-center">
+            <div className="grid grid-cols-[96px_1fr] sm:grid-cols-[120px_1fr] gap-3 sm:gap-3.5 items-stretch">
+              <div className="w-[96px] h-[124px] sm:w-[120px] sm:h-[146px] rounded-md border border-[#e3e7ef] bg-[#f8f9fb] overflow-hidden flex flex-col items-center justify-center">
                 {student.photoUrl ? (
                   <img
                     src={student.photoUrl}

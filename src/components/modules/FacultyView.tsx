@@ -119,7 +119,66 @@ export function FacultyView({
       </div>
 
       <div className="bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="md:hidden divide-y divide-[#e3e7ef]">
+          {lecturers.map((l) => {
+            const assignedUes = state.ues.filter((u) => u.enseignantId === l.id);
+            return (
+              <div key={l.id} className="p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm text-[#161e2e] truncate">{l.nom}</p>
+                    <p className="text-xs text-slate-500">{l.grade}</p>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      {l.specialite} · {l.campus}
+                    </p>
+                  </div>
+                  <p className="font-mono text-xs font-bold text-[#0b1f3f] tabular-nums shrink-0">
+                    {formatFCFA(l.heuresEffectuees * l.tauxHoraire)}
+                  </p>
+                </div>
+                <p className="text-xs text-slate-500">
+                  UE :{' '}
+                  {assignedUes.length > 0
+                    ? assignedUes.map((u) => u.code).join(' · ')
+                    : 'Aucune UE'}
+                </p>
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <span className="font-mono text-xs text-slate-600 tabular-nums">
+                    {l.heuresEffectuees}h × {formatFCFA(l.tauxHoraire)}
+                  </span>
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleAddHours(l, 2)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] text-xs font-mono font-semibold text-[#0b1f3f] cursor-pointer"
+                    >
+                      <Clock className="w-3 h-3" />
+                      +2h
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(l)}
+                      aria-label={`Modifier ${l.nom}`}
+                      className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteLecturer(l.id)}
+                      aria-label={`Supprimer ${l.nom}`}
+                      className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-[#f8f9fb] border-b border-[#e3e7ef] text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -200,9 +259,9 @@ export function FacultyView({
 
       {/* Add/Edit Lecturer Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4">
-          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
+          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
               <h3 className="text-base font-semibold text-[#161e2e]">
                 {editing ? 'Modifier la fiche enseignant' : 'Nouveau membre du corps professoral'}
               </h3>
@@ -214,8 +273,8 @@ export function FacultyView({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">
                     Nom complet *
@@ -240,7 +299,7 @@ export function FacultyView({
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Spécialité</label>
                   <input
@@ -263,7 +322,7 @@ export function FacultyView({
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Téléphone</label>
                   <input

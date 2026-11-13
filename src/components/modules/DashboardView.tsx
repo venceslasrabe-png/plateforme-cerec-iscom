@@ -120,12 +120,12 @@ export function DashboardView({
   return (
     <div className="space-y-6">
       {/* Contextual Hero Strip */}
-      <div className="bg-[#0b1f3f] text-white rounded-lg p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 border border-[#143263]">
+      <div className="bg-[#0b1f3f] text-white rounded-lg p-4 sm:p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 sm:gap-6 border border-[#143263]">
         <div className="space-y-1.5 max-w-2xl">
           <p className="text-xs font-medium text-[#eab33a]">
             {roleLabels[activeRole]} · Année académique {state.settings.anneeAcademique}
           </p>
-          <h2 className="font-serif text-2xl font-bold tracking-tight text-white">
+          <h2 className="font-serif text-xl sm:text-2xl font-bold tracking-tight text-white">
             Pilotage Académique & Administratif CEREC-ISCOM
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed">
@@ -233,12 +233,12 @@ export function DashboardView({
           <div className="divide-y divide-[#e3e7ef] mt-2">
             {filiereStats.map((f) => (
               <div key={f.id} className="py-3.5 space-y-2">
-                <div className="flex items-center justify-between gap-4 text-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-4 text-sm">
                   <div className="min-w-0">
                     <span className="font-mono text-xs font-semibold text-[#0b1f3f] mr-2">
                       {f.code}
                     </span>
-                    <span className="font-medium text-[#161e2e] truncate">{f.nom}</span>
+                    <span className="font-medium text-[#161e2e]">{f.nom}</span>
                     <span className="text-xs text-slate-500 ml-2">· {f.cycle}</span>
                   </div>
                   <div className="flex items-center gap-4 shrink-0 text-xs font-mono tabular-nums">

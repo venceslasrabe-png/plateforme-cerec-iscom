@@ -7,6 +7,7 @@ import {
   computeCohortRank,
   computeStudentSemesterSummary,
   formatOrdinalFr,
+  isTrimesterCode,
 } from './lmd';
 
 function pdfText(value: string): string {
@@ -74,6 +75,8 @@ async function renderBulletinPage(
 
   const inferredSem = semestre || summary.details[0]?.ue.semestre || 'S1';
   const semNumber = inferredSem.replace(/\D/g, '') || '1';
+  const isTrim = isTrimesterCode(semestre ?? inferredSem);
+  const periodWord = isTrim ? 'Trimestre' : 'Semestre';
   const docNumber = `${student.matricule.split('-').pop() || '0001'}${inferredSem}`;
   const dateStr = new Date().toLocaleDateString('fr-FR');
 
@@ -167,7 +170,7 @@ async function renderBulletinPage(
   doc.setFontSize(10.5);
   doc.setTextColor(11, 31, 63);
   doc.text(
-    semestre ? `EXAMEN SEMESTRE ${semNumber}` : 'RELEVÉ LMD CONSOLIDÉ',
+    semestre ? `EXAMEN ${periodWord.toUpperCase()} ${semNumber}` : 'RELEVÉ LMD CONSOLIDÉ',
     marginX,
     y
   );
@@ -303,7 +306,7 @@ async function renderBulletinPage(
     body: [
       [
         {
-          content: semestre ? `Moyenne Semestre ${semNumber}` : 'Moyenne Générale',
+          content: semestre ? `Moyenne ${periodWord} ${semNumber}` : 'Moyenne Générale',
           styles: { fillColor: [241, 244, 249], fontStyle: 'bold' },
         },
         {

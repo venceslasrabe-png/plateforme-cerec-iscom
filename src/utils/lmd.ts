@@ -10,6 +10,7 @@ import {
   PaymentMode,
   PaymentMotif,
   Student,
+  Trimester,
   UE,
 } from '../types/cerec';
 
@@ -1411,3 +1412,107 @@ export async function importGradesFromFile(
     records,
   };
 }
+
+export function isTrimesterCode(code?: string): boolean {
+  if (!code) return false;
+  return /^T\d+/i.test(code.trim());
+}
+
+export function getAvailablePeriodOptions(
+  state: CerecState,
+  targetYear?: string
+): { code: string; label: string; isTrimester: boolean }[] {
+  const year = targetYear || state.settings.anneeAcademique;
+  const standardSemesters = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'].map((s) => ({
+    code: s,
+    label: `Semestre ${s}`,
+    isTrimester: false,
+  }));
+
+  const yearTrimesters = (state.trimestres ?? [])
+    .filter((t) => t.anneeAcademique === year)
+    .sort((a, b) => a.code.localeCompare(b.code));
+
+  const seen = new Set(standardSemesters.map((o) => o.code));
+  const trimesterOptions: { code: string; label: string; isTrimester: boolean }[] = [];
+
+  yearTrimesters.forEach((t) => {
+    const code = t.code.trim().toUpperCase();
+    if (!seen.has(code)) {
+      seen.add(code);
+      trimesterOptions.push({
+        code,
+        label: `${code} — ${t.nom}`,
+        isTrimester: true,
+      });
+    }
+  });
+
+  // Also include any trimester codes referenced in UEs that aren't in yearTrimesters
+  state.ues.forEach((u) => {
+    const code = u.semestre?.trim().toUpperCase();
+    if (code && !seen.has(code)) {
+      seen.add(code);
+      trimesterOptions.push({
+        code,
+        label: isTrimesterCode(code) ? `Trimestre ${code}` : `Semestre ${code}`,
+        isTrimester: isTrimesterCode(code),
+      });
+    }
+  });
+
+  return [...standardSemesters, ...trimesterOptions];
+}
+
+export function createTrimesterBatchForYear(
+  year: string,
+  existingTrimesters: Trimester[] = []
+): Trimester[] {
+  const match = year.trim().match(/^(\d{4})-(\d{4})$/);
+  const startYear = match ? Number(match[1]) : new Date().getFullYear();
+  const endYear = match ? Number(match[2]) : startYear + 1;
+  const existingCodes = new Set(
+    existingTrimesters
+      .filter((t) => t.anneeAcademique === year)
+      .map((t) => t.code.trim().toUpperCase())
+  );
+
+  const templates: Omit<Trimester, 'id'>[] = [
+    {
+      code: 'T1',
+      nom: '1er Trimestre',
+      anneeAcademique: year,
+      dateDebut: `${startYear}-10-06`,
+      dateFin: `${startYear}-12-19`,
+      statut: 'Planifié',
+      semestreAssocie: 'S1',
+    },
+    {
+      code: 'T2',
+      nom: '2ème Trimestre',
+      anneeAcademique: year,
+      dateDebut: `${endYear}-01-05`,
+      dateFin: `${endYear}-03-27`,
+      statut: 'Planifié',
+      semestreAssocie: 'S1',
+    },
+    {
+      code: 'T3',
+      nom: '3ème Trimestre',
+      anneeAcademique: year,
+      dateDebut: `${endYear}-04-06`,
+      dateFin: `${endYear}-07-03`,
+      statut: 'Planifié',
+      semestreAssocie: 'S2',
+    },
+  ];
+
+  const stamp = Date.now();
+  return templates
+    .filter((tpl) => !existingCodes.has(tpl.code))
+    .map((tpl, idx) => ({
+      ...tpl,
+      id: `tri-${startYear}-${tpl.code.toLowerCase()}-${stamp + idx}`,
+    }));
+}
+

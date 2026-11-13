@@ -4,6 +4,7 @@ import {
   computeCohortRank,
   computeStudentSemesterSummary,
   formatOrdinalFr,
+  isTrimesterCode,
 } from '../utils/lmd';
 import { QrCodeSvg } from './QrCodeSvg';
 
@@ -31,17 +32,19 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
     semestre
   );
 
-  // Determine semester label (e.g., S1 -> SEMESTRE 1)
+  // Determine semester or trimester label (e.g., S1 -> SEMESTRE 1, T1 -> TRIMESTRE 1)
   const inferredSem =
     semestre || summary.details[0]?.ue.semestre || 'S1';
   const semNumber = inferredSem.replace(/\D/g, '') || '1';
+  const isTrim = isTrimesterCode(semestre ?? inferredSem);
+  const periodWord = isTrim ? 'Trimestre' : 'Semestre';
   const docNumber = `${student.matricule.split('-').pop() || '0001'}${inferredSem}`;
   const dateStr = new Date().toLocaleDateString('fr-FR');
 
   return (
     <div className="space-y-5 text-xs text-[#161e2e] bg-white">
       {/* Top 3-Zone Institutional Header matching official model */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row print:flex-row items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <img
             src={CEREC_LOGO_URL}
@@ -59,7 +62,7 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
           </div>
         </div>
 
-        <div className="text-center pt-1">
+        <div className="sm:text-center print:text-center pt-1">
           <h4 className="text-lg font-bold text-[#161e2e] leading-tight">
             Relevé de notes
           </h4>
@@ -84,7 +87,7 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
       </div>
 
       {/* Student Identification Block */}
-      <div className="grid grid-cols-[150px_1fr] gap-y-1.5 text-xs max-w-lg -mt-4">
+      <div className="grid grid-cols-1 sm:grid-cols-[150px_1fr] print:grid-cols-[150px_1fr] gap-y-1.5 text-xs max-w-lg sm:-mt-4 print:-mt-4">
         <span className="text-slate-600">Étudiant :</span>
         <span className="font-mono font-bold text-[#0b1f3f]">{student.matricule}</span>
 
@@ -118,7 +121,7 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
       {/* Session Title */}
       <div className="pt-1">
         <h5 className="text-sm font-bold uppercase tracking-wide text-[#0b1f3f]">
-          EXAMEN SEMESTRE {semNumber}
+          EXAMEN {periodWord.toUpperCase()} {semNumber}
         </h5>
       </div>
 
@@ -126,7 +129,7 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
       <div className="space-y-4">
         {summary.ueGroups.map((group) => (
           <div key={group.uniteNom} className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-bold text-[#161e2e]">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-[#161e2e]">
               <span>Unité d’enseignement : {group.uniteNom}</span>
               <span className="font-mono tabular-nums text-[#0b1f3f]">
                 Moyenne UE :{' '}
@@ -134,7 +137,8 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
               </span>
             </div>
 
-            <table className="w-full text-left border-collapse border border-slate-300 text-[11px]">
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-full min-w-[620px] print:min-w-0 text-left border-collapse border border-slate-300 text-[11px]">
               <thead>
                 <tr className="bg-[#0b1f3f] text-white font-semibold">
                   <th className="py-1.5 px-2.5 border border-slate-400">
@@ -213,6 +217,7 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         ))}
 
@@ -225,11 +230,12 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
       </div>
 
       {/* Bottom 2-Row Summary Grid matching PDF model */}
-      <table className="w-full border-collapse border border-slate-400 text-xs">
+      <div className="overflow-x-auto print:overflow-visible">
+      <table className="w-full min-w-[520px] print:min-w-0 border-collapse border border-slate-400 text-xs">
         <tbody>
           <tr>
             <td className="py-2 px-3 border border-slate-300 bg-[#f1f4f9] font-medium w-44">
-              Moyenne Semestre {semNumber}
+              Moyenne {periodWord} {semNumber}
             </td>
             <td className="py-2 px-3 border border-slate-300 text-center font-mono font-bold text-[#0b1f3f] tabular-nums w-32">
               {summary.moyenneGenerale !== null
@@ -265,9 +271,10 @@ export function BulletinReleve({ student, state, semestre }: BulletinReleveProps
           </tr>
         </tbody>
       </table>
+      </div>
 
       {/* Signature Footer + Verifiable QR */}
-      <div className="flex items-end justify-between gap-4 pt-4 text-xs">
+      <div className="flex flex-col sm:flex-row print:flex-row sm:items-end print:items-end justify-between gap-4 pt-4 text-xs">
         <div className="space-y-1">
           <p className="text-slate-700">
             Fait à {student.campus}, le {dateStr}

@@ -136,9 +136,9 @@ export function CommunicationView({
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* Left: Notes de service & Diffusions */}
       <div className="lg:col-span-7 bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] flex items-center justify-between gap-4">
+        <div className="px-4 sm:px-5 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Megaphone className="w-4 h-4 text-[#0b1f3f]" />
+            <Megaphone className="w-4 h-4 text-[#0b1f3f] shrink-0" />
             <h3 className="text-sm font-semibold text-[#161e2e]">
               Notes de service & Diffusions Campus ({announcements.length})
             </h3>
@@ -199,9 +199,9 @@ export function CommunicationView({
 
       {/* Right: Missions & Assignations */}
       <div className="lg:col-span-5 bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] flex items-center justify-between gap-4">
+        <div className="px-4 sm:px-5 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-[#c58b12]" />
+            <CheckCircle2 className="w-4 h-4 text-[#c58b12] shrink-0" />
             <h3 className="text-sm font-semibold text-[#161e2e]">
               Missions & Assignations ({state.missions.length})
             </h3>
@@ -268,9 +268,9 @@ export function CommunicationView({
 
       {/* Add/Edit Announcement Modal */}
       {annModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4">
-          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
+          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
               <h3 className="text-base font-semibold text-[#161e2e]">
                 {editingAnn ? 'Modifier la note de service' : 'Publier une note de service'}
               </h3>
@@ -282,7 +282,7 @@ export function CommunicationView({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleSaveAnn} className="p-6 space-y-4">
+            <form onSubmit={handleSaveAnn} className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Titre *</label>
                 <input
@@ -293,7 +293,7 @@ export function CommunicationView({
                   className="w-full px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Cible</label>
                   <select
@@ -374,9 +374,9 @@ export function CommunicationView({
 
       {/* Add/Edit Mission Modal */}
       {taskModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4">
-          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
+          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
               <h3 className="text-base font-semibold text-[#161e2e]">
                 {editingTask ? 'Modifier la mission' : 'Assigner une nouvelle mission'}
               </h3>
@@ -388,7 +388,7 @@ export function CommunicationView({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleSaveTask} className="p-6 space-y-4">
+            <form onSubmit={handleSaveTask} className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   Intitulé de la mission *
@@ -401,7 +401,7 @@ export function CommunicationView({
                   className="w-full px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">
                     Service assigné

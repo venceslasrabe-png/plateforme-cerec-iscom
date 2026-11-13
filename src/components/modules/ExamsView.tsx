@@ -13,8 +13,10 @@ import {
   computeCohortRank,
   computeStudentSemesterSummary,
   formatOrdinalFr,
+  getAvailablePeriodOptions,
   GradeImportResult,
   importGradesFromFile,
+  isTrimesterCode,
   ueMatchesStudent,
 } from '../../utils/lmd';
 import {
@@ -55,6 +57,8 @@ export function ExamsView({
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<GradeImportResult | null>(null);
+
+  const periodOptions = getAvailablePeriodOptions(state);
 
   const availableOptions =
     filiereFilter === 'Toutes'
@@ -145,8 +149,8 @@ export function ExamsView({
   return (
     <div className="space-y-5">
       {/* Cohort & Deliberation Toolbar */}
-      <div className="bg-white border border-[#e3e7ef] rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="bg-white border border-[#e3e7ef] rounded-lg p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-2.5 flex-1">
           <select
             value={filiereFilter}
             onChange={(e) => {
@@ -154,7 +158,7 @@ export function ExamsView({
               setOptionFilter('Toutes');
             }}
             aria-label="Filière délibération"
-            className="px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+            className="w-full lg:w-auto px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
           >
             <option value="Toutes">Toutes les filières</option>
             {state.filieres.map((f) => (
@@ -168,7 +172,7 @@ export function ExamsView({
             value={optionFilter}
             onChange={(e) => setOptionFilter(e.target.value)}
             aria-label="Option délibération"
-            className="px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+            className="w-full lg:w-auto px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
           >
             <option value="Toutes">Toutes les options</option>
             {availableOptions.map((opt) => (
@@ -182,7 +186,7 @@ export function ExamsView({
             value={niveauFilter}
             onChange={(e) => setNiveauFilter(e.target.value)}
             aria-label="Niveau délibération"
-            className="px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+            className="w-full lg:w-auto px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
           >
             <option value="Tous">Tous niveaux</option>
             {['L1', 'L2', 'L3', 'M1', 'M2', 'FQ'].map((n) => (
@@ -196,7 +200,7 @@ export function ExamsView({
             value={decisionFilter}
             onChange={(e) => setDecisionFilter(e.target.value)}
             aria-label="Filtrer par décision"
-            className="px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+            className="w-full lg:w-auto px-3 py-2 text-sm border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
           >
             <option value="Toutes">Toutes décisions</option>
             <option value="Admis">Admis</option>
@@ -319,9 +323,110 @@ export function ExamsView({
         </div>
       </div>
 
-      {/* Deliberation Table */}
+      {/* Deliberation Mobile Cards & Desktop Table */}
       <div className="bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="md:hidden divide-y divide-[#e3e7ef]">
+          {rows.map(({ student, summary, rank }) => (
+            <div key={student.id} className="p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-xs font-semibold text-[#0b1f3f]">
+                    {student.matricule}
+                  </p>
+                  <p className="font-semibold text-sm text-[#161e2e] truncate">
+                    {student.nom} {student.prenom}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {student.filiereCode} · {student.niveau}
+                    {student.option ? ` · ${student.option}` : ''} · {student.campus}
+                  </p>
+                </div>
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium shrink-0 ${
+                    summary.decision === 'Admis' ||
+                    summary.decision === 'Admis par compensation'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : summary.decision === 'Rattrapage'
+                      ? 'bg-amber-50 text-amber-800'
+                      : summary.decision === 'Ajourné'
+                      ? 'bg-red-50 text-red-700'
+                      : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {summary.decision}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-xs bg-[#f8f9fb] border border-[#e3e7ef] rounded-lg p-2.5">
+                <div>
+                  <span className="text-[10px] uppercase text-slate-500 block">Moyenne</span>
+                  <span className="font-mono font-bold text-[#161e2e] tabular-nums">
+                    {summary.moyenneGenerale !== null ? `${summary.moyenneGenerale.toFixed(2)}/20` : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-slate-500 block">ECTS</span>
+                  <span className="font-mono font-semibold text-slate-700 tabular-nums">
+                    {summary.creditsAcquis}/{summary.creditsTotaux}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase text-slate-500 block">Rang</span>
+                  <span className="font-mono text-slate-700 tabular-nums">
+                    {rank.rang ? `${formatOrdinalFr(rank.rang)} / ${rank.totalCandidats}` : '—'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-slate-600">
+                  Mention : <strong className="text-[#161e2e]">{summary.mention}</strong>
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(summary.decision === 'Rattrapage' || summary.decision === 'Ajourné') && (
+                    <button
+                      type="button"
+                      onClick={() => openRattrapageModal(student)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      Rattrapage
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const fileName = await downloadBulletinPdf(student, state);
+                      onNotify(`PDF téléchargé : ${fileName}`);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-xs font-bold cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulletinSemestre('Tous');
+                      setBulletinStudent(student);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-[#e3e7ef] text-xs font-semibold text-[#0b1f3f] cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Relevé
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <div className="py-8 px-4 text-center text-sm text-slate-500">
+              Aucun étudiant dans cette sélection de jury.
+            </div>
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-[#f8f9fb] border-b border-[#e3e7ef] text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -436,30 +541,30 @@ export function ExamsView({
 
       {/* Inline Rattrapage Entry Modal */}
       {rattrapageStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4">
-          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-md shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb]">
-              <div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
+          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-md shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
+              <div className="min-w-0">
                 <h3 className="text-sm font-semibold text-[#161e2e]">
                   Saisie Session de Rattrapage
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 truncate">
                   {rattrapageStudent.nom} {rattrapageStudent.prenom} · {rattrapageStudent.matricule}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setRattrapageStudent(null)}
-                className="p-1 text-slate-500 cursor-pointer"
+                className="p-1 text-slate-500 cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleSaveRattrapage} className="p-6 space-y-4">
+            <form onSubmit={handleSaveRattrapage} className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               {Object.keys(rattrapageInputs).map((ueId) => {
                 const ue = state.ues.find((u) => u.id === ueId);
                 return (
-                  <div key={ueId} className="flex items-center justify-between gap-3">
+                  <div key={ueId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-[#0b1f3f] truncate">
                         {ue?.code} — {ue?.intitule}
@@ -478,7 +583,7 @@ export function ExamsView({
                         })
                       }
                       placeholder="/20"
-                      className="w-24 px-2.5 py-1.5 text-center font-mono text-sm border border-[#e3e7ef] rounded-lg"
+                      className="w-full sm:w-24 px-2.5 py-1.5 text-center font-mono text-sm border border-[#e3e7ef] rounded-lg"
                     />
                   </div>
                 );
@@ -519,10 +624,10 @@ export function ExamsView({
             <select
               value={bulletinSemestre}
               onChange={(e) => setBulletinSemestre(e.target.value)}
-              aria-label="Semestre du relevé"
+              aria-label="Période du relevé"
               className="px-2.5 py-1.5 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-white text-[#0b1f3f]"
             >
-              <option value="Tous">Tous semestres</option>
+              <option value="Tous">Toutes périodes</option>
               {Array.from(
                 new Set(
                   state.ues
@@ -533,7 +638,7 @@ export function ExamsView({
                 .sort()
                 .map((sem) => (
                   <option key={sem} value={sem}>
-                    Semestre {sem}
+                    {isTrimesterCode(sem) ? `Trimestre ${sem}` : `Semestre ${sem}`}
                   </option>
                 ))}
             </select>
@@ -569,13 +674,13 @@ export function ExamsView({
             <select
               value={bulletinSemestre}
               onChange={(e) => setBulletinSemestre(e.target.value)}
-              aria-label="Semestre des relevés"
+              aria-label="Période des relevés"
               className="px-2.5 py-1.5 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-white text-[#0b1f3f]"
             >
-              <option value="Tous">Tous semestres</option>
-              {['S1', 'S2', 'S3', 'S4', 'S5', 'S6'].map((sem) => (
-                <option key={sem} value={sem}>
-                  Semestre {sem}
+              <option value="Tous">Toutes périodes</option>
+              {periodOptions.map((opt) => (
+                <option key={opt.code} value={opt.code}>
+                  {opt.label}
                 </option>
               ))}
             </select>
@@ -625,43 +730,45 @@ export function ExamsView({
               {state.settings.seuilValidation}/20 et compensation semestrielle) :
             </p>
 
-            <table className="w-full text-left border-collapse border border-[#e3e7ef]">
-              <thead>
-                <tr className="bg-[#0b1f3f] text-white text-[11px] uppercase">
-                  <th className="py-2 px-3">Matricule</th>
-                  <th className="py-2 px-3">Nom & Prénom</th>
-                  <th className="py-2 px-3 text-center">Crédits</th>
-                  <th className="py-2 px-3 text-right">Moyenne</th>
-                  <th className="py-2 px-3 text-center">Rang</th>
-                  <th className="py-2 px-3">Mention</th>
-                  <th className="py-2 px-3">Décision</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e3e7ef]">
-                {rows.map(({ student, summary, rank }) => (
-                  <tr key={student.id}>
-                    <td className="py-2 px-3 font-mono">{student.matricule}</td>
-                    <td className="py-2 px-3 font-semibold">
-                      {student.nom} {student.prenom}
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono tabular-nums">
-                      {summary.creditsAcquis}/{summary.creditsTotaux}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono font-bold tabular-nums">
-                      {summary.moyenneGenerale?.toFixed(2) ?? '—'}
-                    </td>
-                    <td className="py-2 px-3 text-center font-mono">
-                      {rank.rang ? formatOrdinalFr(rank.rang) : '—'}
-                    </td>
-                    <td className="py-2 px-3">{summary.mention}</td>
-                    <td className="py-2 px-3 font-semibold">{summary.decision}</td>
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-full text-left border-collapse border border-[#e3e7ef]">
+                <thead>
+                  <tr className="bg-[#0b1f3f] text-white text-[11px] uppercase">
+                    <th className="py-2 px-3">Matricule</th>
+                    <th className="py-2 px-3">Nom & Prénom</th>
+                    <th className="py-2 px-3 text-center">Crédits</th>
+                    <th className="py-2 px-3 text-right">Moyenne</th>
+                    <th className="py-2 px-3 text-center">Rang</th>
+                    <th className="py-2 px-3">Mention</th>
+                    <th className="py-2 px-3">Décision</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-[#e3e7ef]">
+                  {rows.map(({ student, summary, rank }) => (
+                    <tr key={student.id}>
+                      <td className="py-2 px-3 font-mono">{student.matricule}</td>
+                      <td className="py-2 px-3 font-semibold">
+                        {student.nom} {student.prenom}
+                      </td>
+                      <td className="py-2 px-3 text-center font-mono tabular-nums">
+                        {summary.creditsAcquis}/{summary.creditsTotaux}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono font-bold tabular-nums">
+                        {summary.moyenneGenerale?.toFixed(2) ?? '—'}
+                      </td>
+                      <td className="py-2 px-3 text-center font-mono">
+                        {rank.rang ? formatOrdinalFr(rank.rang) : '—'}
+                      </td>
+                      <td className="py-2 px-3">{summary.mention}</td>
+                      <td className="py-2 px-3 font-semibold">{summary.decision}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-            <div className="flex items-end justify-between gap-6 pt-8">
-              <div className="grid grid-cols-3 gap-6 flex-1 text-center">
+            <div className="flex flex-col sm:flex-row print:flex-row items-center sm:items-end print:items-end justify-between gap-6 pt-8">
+              <div className="grid grid-cols-1 sm:grid-cols-3 print:grid-cols-3 gap-6 w-full flex-1 text-center">
                 <div>
                   <p className="font-semibold">Le Président du Jury</p>
                   <div className="h-12 border-b border-dashed border-slate-300 mx-4" />

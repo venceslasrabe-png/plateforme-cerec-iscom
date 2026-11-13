@@ -25,6 +25,7 @@ import {
   computeStudentFinance,
   formatFCFA,
   getAvailableAcademicYears,
+  isTrimesterCode,
   ueMatchesStudent,
 } from '../../utils/lmd';
 import { downloadBulletinPdf } from '../../utils/bulletinPdf';
@@ -231,8 +232,8 @@ export function StudentsView({
     <div className="space-y-5">
       {/* Toolbar */}
       <div className="bg-white border border-[#e3e7ef] rounded-lg p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-2.5 flex-1">
+          <div className="relative sm:col-span-2 lg:flex-1 lg:min-w-[200px] lg:max-w-xs">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -247,7 +248,7 @@ export function StudentsView({
             value={filiereFilter}
             onChange={(e) => setFiliereFilter(e.target.value)}
             aria-label="Filtrer par filière"
-            className="px-3 py-2 text-xs font-medium border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+            className="w-full lg:w-auto px-3 py-2 text-xs font-medium border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
           >
             <option value="Toutes">Toutes les filières</option>
             {state.filieres.map((f) => (
@@ -261,7 +262,7 @@ export function StudentsView({
             value={niveauFilter}
             onChange={(e) => setNiveauFilter(e.target.value)}
             aria-label="Filtrer par niveau"
-            className="px-3 py-2 text-xs font-medium border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+            className="w-full lg:w-auto px-3 py-2 text-xs font-medium border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
           >
             <option value="Tous">Tous niveaux</option>
             {NIVEAUX.map((n) => (
@@ -275,7 +276,7 @@ export function StudentsView({
             value={anneeFilter}
             onChange={(e) => setAnneeFilter(e.target.value)}
             aria-label="Filtrer par année académique"
-            className="px-3 py-2 text-xs font-medium border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+            className="w-full lg:w-auto px-3 py-2 text-xs font-medium border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
           >
             <option value="Toutes">Toutes années</option>
             {academicYears.map((y) => (
@@ -289,7 +290,7 @@ export function StudentsView({
             value={financeFilter}
             onChange={(e) => setFinanceFilter(e.target.value)}
             aria-label="Filtrer par statut financier"
-            className="px-3 py-2 text-xs font-medium border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+            className="w-full lg:w-auto px-3 py-2 text-xs font-medium border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
           >
             <option value="Tous">Tous statuts financiers</option>
             <option value="Soldé">Soldé</option>
@@ -331,9 +332,142 @@ export function StudentsView({
         </div>
       </div>
 
-      {/* Table */}
+      {/* Mobile Cards & Desktop Table */}
       <div className="bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="md:hidden divide-y divide-[#e3e7ef]">
+          {filtered.map((s) => {
+            const fin = computeStudentFinance(s, state.filieres, state.payments);
+            return (
+              <div key={s.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs font-semibold text-[#0b1f3f]">
+                      {s.matricule} · {s.anneeAcademique}
+                    </p>
+                    <p className="font-semibold text-sm text-[#161e2e] truncate">
+                      {s.nom} {s.prenom}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {s.filiereCode} · {s.niveau}
+                      {s.option ? ` · ${s.option}` : ''} · {s.campus}
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium shrink-0 ${
+                      s.statutDossier === 'Complet'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : s.statutDossier === 'En attente'
+                        ? 'bg-amber-50 text-amber-800'
+                        : 'bg-red-50 text-red-700'
+                    }`}
+                  >
+                    {s.statutDossier}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 bg-[#f8f9fb] border border-[#e3e7ef] rounded-lg px-3 py-2 text-xs">
+                  <span className="text-slate-500">{s.telephone || 'Tél. non renseigné'}</span>
+                  <div className="text-right font-mono tabular-nums">
+                    <span className="font-semibold text-[#161e2e]">
+                      {formatFCFA(fin.totalPaye)}
+                    </span>
+                    <span
+                      className={`ml-1.5 text-[11px] ${
+                        fin.statutFinancier === 'Soldé'
+                          ? 'text-emerald-700'
+                          : fin.statutFinancier === 'Retard critique'
+                          ? 'text-red-700'
+                          : 'text-amber-700'
+                      }`}
+                    >
+                      ({fin.tauxCouverture}%)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setPrintDoc({ type: 'card', student: s })}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-[#e3e7ef] text-xs font-medium text-[#0b1f3f] cursor-pointer"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    Carte
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const fil = state.filieres.find((f) => f.code === s.filiereCode);
+                      const fileName = await downloadCartePvcPdf(s, fil, 'both');
+                      onNotify?.(`Carte PVC PDF téléchargée : ${fileName}`);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    PVC
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrintDoc({ type: 'fiche', student: s })}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-[#e3e7ef] text-xs font-medium text-[#0b1f3f] cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Fiche
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulletinSemestre('Tous');
+                      setPrintDoc({ type: 'bulletin', student: s });
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-[#e3e7ef] text-xs font-medium text-[#0b1f3f] cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    Relevé
+                  </button>
+                  {fin.resteAPayer > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPayStudent(s);
+                        setPayAmount(Math.min(150000, fin.resteAPayer));
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      Payer
+                    </button>
+                  )}
+                  <div className="ml-auto flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(s)}
+                      aria-label={`Modifier ${s.nom}`}
+                      className="p-1.5 rounded text-slate-500 hover:text-[#0b1f3f] hover:bg-slate-100 cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteStudent(s.id)}
+                      aria-label={`Supprimer ${s.nom}`}
+                      className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div className="py-10 px-4 text-center text-sm text-slate-500">
+              Aucun étudiant ne correspond aux critères sélectionnés.
+            </div>
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#f8f9fb] border-b border-[#e3e7ef] text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -494,11 +628,11 @@ export function StudentsView({
 
       {/* Quick Payment Modal */}
       {payStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4">
-          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-md shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb]">
-              <div>
-                <h3 className="text-sm font-semibold text-[#161e2e]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
+          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-md shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-[#161e2e] truncate">
                   Encaissement rapide — {payStudent.nom} {payStudent.prenom}
                 </h3>
                 <p className="text-xs font-mono text-slate-500">{payStudent.matricule}</p>
@@ -506,12 +640,12 @@ export function StudentsView({
               <button
                 type="button"
                 onClick={() => setPayStudent(null)}
-                className="p-1 text-slate-500 cursor-pointer"
+                className="p-1 text-slate-500 cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleQuickPaySubmit} className="p-6 space-y-4">
+            <form onSubmit={handleQuickPaySubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   Montant (FCFA)
@@ -526,7 +660,7 @@ export function StudentsView({
                   className="w-full px-3 py-2 text-sm font-mono border border-[#e3e7ef] rounded-lg"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Motif</label>
                   <select
@@ -582,9 +716,9 @@ export function StudentsView({
 
       {/* Create/Edit Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4 overflow-y-auto">
-          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-2xl shadow-xl overflow-hidden my-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
+          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-2xl shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
               <h3 className="text-base font-semibold text-[#161e2e]">
                 {editing ? 'Modifier le dossier étudiant' : 'Nouvelle inscription CEREC-ISCOM'}
               </h3>
@@ -597,7 +731,7 @@ export function StudentsView({
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">
@@ -908,10 +1042,10 @@ export function StudentsView({
               <select
                 value={bulletinSemestre}
                 onChange={(e) => setBulletinSemestre(e.target.value)}
-                aria-label="Semestre du relevé"
+                aria-label="Période du relevé"
                 className="px-2.5 py-1.5 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-white text-[#0b1f3f]"
               >
-                <option value="Tous">Tous semestres</option>
+                <option value="Tous">Toutes périodes</option>
                 {Array.from(
                   new Set(
                     state.ues
@@ -922,7 +1056,7 @@ export function StudentsView({
                   .sort()
                   .map((sem) => (
                     <option key={sem} value={sem}>
-                      Semestre {sem}
+                      {isTrimesterCode(sem) ? `Trimestre ${sem}` : `Semestre ${sem}`}
                     </option>
                   ))}
               </select>
@@ -989,7 +1123,7 @@ export function StudentsView({
                 academicYear={printDoc.student.anneeAcademique}
               />
 
-              <div className="grid grid-cols-2 gap-4 text-xs border border-[#e3e7ef] rounded-lg p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-4 text-xs border border-[#e3e7ef] rounded-lg p-4">
                 <div>
                   <p className="text-slate-500">Nom et Prénom</p>
                   <p className="font-bold text-[#161e2e] text-sm mt-0.5">
@@ -1018,7 +1152,7 @@ export function StudentsView({
                 </div>
                 <div>
                   <p className="text-slate-500">Téléphone & Email</p>
-                  <p className="font-medium mt-0.5">
+                  <p className="font-medium mt-0.5 break-all">
                     {printDoc.student.telephone} · {printDoc.student.email}
                   </p>
                 </div>
@@ -1030,7 +1164,7 @@ export function StudentsView({
                 </div>
               </div>
 
-              <div className="border border-[#e3e7ef] rounded-lg p-4 flex items-center justify-between">
+              <div className="border border-[#e3e7ef] rounded-lg p-4 flex flex-col sm:flex-row print:flex-row items-start sm:items-center print:items-center justify-between gap-4">
                 <div className="space-y-1 text-xs">
                   <p className="font-semibold text-[#0b1f3f]">Situation Administrative & Financière</p>
                   <p className="text-slate-600">
@@ -1054,7 +1188,7 @@ export function StudentsView({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-8 pt-6 text-xs text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-8 pt-6 text-xs text-center">
                 <div>
                   <p className="font-semibold text-slate-700">Signature de l’Étudiant</p>
                   <div className="h-14 border-b border-dashed border-slate-300 mx-8" />

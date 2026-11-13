@@ -2,6 +2,7 @@ import {
   AlertCircle,
   Archive,
   CalendarPlus,
+  CalendarRange,
   CheckCircle2,
   Download,
   RotateCcw,
@@ -28,7 +29,9 @@ interface SettingsViewProps {
   onUpdateSettings: (settings: LmdSettings) => void;
   onImportState: (nextState: CerecState) => void;
   onOpenCreateYear: () => void;
+  onOpenCreateTrimester: () => void;
   onActivateYear: (year: string) => void;
+  onActivateTrimester: (trimesterId: string) => void;
   onResetDemo: () => void;
   onNotify: (msg: string) => void;
 }
@@ -73,7 +76,9 @@ export function SettingsView({
   onUpdateSettings,
   onImportState,
   onOpenCreateYear,
+  onOpenCreateTrimester,
   onActivateYear,
+  onActivateTrimester,
   onResetDemo,
   onNotify,
 }: SettingsViewProps) {
@@ -210,11 +215,11 @@ export function SettingsView({
               <label className="block text-xs font-medium text-slate-600 mb-1">
                 Année académique en cours
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={form.anneeAcademique}
                   onChange={(e) => setForm({ ...form, anneeAcademique: e.target.value })}
-                  className="flex-1 px-3 py-2 text-sm font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-white"
+                  className="flex-1 min-w-[130px] px-3 py-2 text-sm font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-white"
                 >
                   {allYears.map((y) => (
                     <option key={y} value={y}>
@@ -230,6 +235,52 @@ export function SettingsView({
                 >
                   <CalendarPlus className="w-3.5 h-3.5" />
                   Nouvelle
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Trimestre actif ({form.anneeAcademique})
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={
+                    form.trimestreActifId ??
+                    (state.trimestres ?? []).find(
+                      (t) => t.anneeAcademique === form.anneeAcademique
+                    )?.id ??
+                    ''
+                  }
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setForm({ ...form, trimestreActifId: id || undefined });
+                    if (id) onActivateTrimester(id);
+                  }}
+                  className="flex-1 min-w-[130px] px-3 py-2 text-sm font-semibold border border-[#e3e7ef] rounded-lg bg-white text-[#0b1f3f]"
+                >
+                  {(state.trimestres ?? []).filter(
+                    (t) => t.anneeAcademique === form.anneeAcademique
+                  ).length === 0 ? (
+                    <option value="">Aucun trimestre défini</option>
+                  ) : (
+                    (state.trimestres ?? [])
+                      .filter((t) => t.anneeAcademique === form.anneeAcademique)
+                      .sort((a, b) => a.code.localeCompare(b.code))
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.code} — {t.nom}
+                        </option>
+                      ))
+                  )}
+                </select>
+                <button
+                  type="button"
+                  onClick={onOpenCreateTrimester}
+                  title="Créer un trimestre ou générer T1, T2, T3"
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-[#0b1f3f] hover:bg-slate-50 text-[#0b1f3f] text-xs font-bold cursor-pointer whitespace-nowrap"
+                >
+                  <CalendarRange className="w-3.5 h-3.5 text-[#c58b12]" />
+                  Créer
                 </button>
               </div>
             </div>
@@ -396,12 +447,12 @@ export function SettingsView({
               Exporter les années antérieures ({priorYears.length}) (.xlsx)
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={selectedArchiveYear}
                 onChange={(e) => setSelectedArchiveYear(e.target.value)}
                 aria-label="Choisir une année académique à exporter"
-                className="flex-1 px-3 py-2 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
+                className="flex-1 min-w-[140px] px-3 py-2 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-white text-[#161e2e]"
               >
                 {allYears.map((y) => (
                   <option key={y} value={y}>
@@ -571,8 +622,8 @@ export function SettingsView({
 
       {/* In-App Confirmation Modal for Archive Import */}
       {importPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4">
-          <div className="bg-white border border-[#e3e7ef] rounded-xl max-w-lg w-full p-6 space-y-4 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white border border-[#e3e7ef] rounded-xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-xl max-h-[92vh] overflow-y-auto my-auto">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-base font-bold text-[#161e2e]">

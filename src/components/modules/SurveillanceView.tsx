@@ -146,8 +146,8 @@ export function SurveillanceView({
             <ShieldCheck className="w-4 h-4 text-[#0b1f3f]" />
             Contrôle Badge Étudiant (Guérite Principale)
           </div>
-          <form onSubmit={handleBadgeCheckIn} className="flex items-center gap-2">
-            <div className="relative flex-1">
+          <form onSubmit={handleBadgeCheckIn} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="relative flex-1 min-w-0">
               <QrCode className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -159,7 +159,7 @@ export function SurveillanceView({
             </div>
             <button
               type="submit"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer"
             >
               <LogIn className="w-3.5 h-3.5 text-[#eab33a]" />
               Contrôler & Entrer
@@ -253,7 +253,64 @@ export function SurveillanceView({
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="md:hidden divide-y divide-[#e3e7ef]">
+          {logs.map((g) => (
+            <div key={g.id} className="p-4 space-y-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm text-[#161e2e] truncate">{g.nomComplet}</p>
+                  <p className="text-xs text-slate-500">
+                    {g.typePersonne} · <span className="font-mono text-[#0b1f3f]">{g.reference}</span>
+                  </p>
+                </div>
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium shrink-0 ${
+                    g.statutAcces === 'Autorisé'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : g.statutAcces === 'Alerte Scolarité'
+                      ? 'bg-amber-50 text-amber-800'
+                      : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {g.statutAcces}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600">
+                {g.motif} · {g.campus}
+              </p>
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <span className="font-mono text-xs text-slate-600 tabular-nums">
+                  Entrée {g.heureEntree}
+                  {g.heureSortie ? ` · Sortie ${g.heureSortie}` : ''}
+                </span>
+                <div className="inline-flex items-center gap-1.5">
+                  {!g.heureSortie ? (
+                    <button
+                      type="button"
+                      onClick={() => onMarkExit(g.id)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] text-xs font-medium text-[#0b1f3f] cursor-pointer"
+                    >
+                      <LogOut className="w-3 h-3" />
+                      Sortie
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400 mr-1">Clôturé</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onDeleteGateLog(g.id)}
+                    aria-label={`Supprimer passage ${g.nomComplet}`}
+                    className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="border-b border-[#e3e7ef] text-[11px] font-semibold uppercase tracking-wider text-slate-500">

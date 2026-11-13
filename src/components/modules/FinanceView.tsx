@@ -153,33 +153,33 @@ export function FinanceView({
 
       {/* Toolbar */}
       <div className="bg-white border border-[#e3e7ef] rounded-lg p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
-          <div className="flex items-center gap-1 p-1 bg-[#f8f9fb] border border-[#e3e7ef] rounded-lg">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 flex-1">
+          <div className="grid grid-cols-2 sm:flex items-center gap-1 p-1 bg-[#f8f9fb] border border-[#e3e7ef] rounded-lg">
             <button
               type="button"
               onClick={() => setSubTab('journal')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer ${
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer text-center ${
                 subTab === 'journal'
                   ? 'bg-[#0b1f3f] text-white'
                   : 'text-slate-600 hover:text-[#161e2e]'
               }`}
             >
-              Journal des encaissements
+              Encaissements
             </button>
             <button
               type="button"
               onClick={() => setSubTab('soldes')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer ${
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer text-center ${
                 subTab === 'soldes'
                   ? 'bg-[#0b1f3f] text-white'
                   : 'text-slate-600 hover:text-[#161e2e]'
               }`}
             >
-              Situation des soldes étudiants
+              Soldes étudiants
             </button>
           </div>
 
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <div className="relative flex-1 min-w-0 sm:min-w-[200px] sm:max-w-xs">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -220,7 +220,61 @@ export function FinanceView({
       {/* Tables */}
       {subTab === 'journal' ? (
         <div className="bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="md:hidden divide-y divide-[#e3e7ef]">
+            {payments.map((p) => {
+              const st = state.students.find((s) => s.id === p.studentId);
+              return (
+                <div key={p.id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs font-semibold text-[#0b1f3f]">
+                        {p.numeroRecu} · {p.date}
+                      </p>
+                      <p className="font-semibold text-sm text-[#161e2e] truncate">
+                        {st ? `${st.nom} ${st.prenom}` : p.studentId}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {st?.matricule} · {p.campus}
+                      </p>
+                    </div>
+                    <p className="font-mono text-sm font-bold text-emerald-700 tabular-nums shrink-0">
+                      {formatFCFA(p.montant)}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-xs text-slate-600">
+                      {p.motif} · {p.mode}
+                    </span>
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setReceipt(p)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-[#e3e7ef] text-xs font-medium text-[#0b1f3f] cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Reçu
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeletePayment(p.id)}
+                        aria-label={`Annuler ${p.numeroRecu}`}
+                        className="p-1.5 rounded text-slate-400 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {payments.length === 0 && (
+              <div className="py-8 px-4 text-center text-sm text-slate-500">
+                Aucun encaissement enregistré pour cette sélection.
+              </div>
+            )}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="bg-[#f8f9fb] border-b border-[#e3e7ef] text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -287,7 +341,85 @@ export function FinanceView({
         </div>
       ) : (
         <div className="bg-white border border-[#e3e7ef] rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="md:hidden divide-y divide-[#e3e7ef]">
+            {students.map((s) => {
+              const fin = computeStudentFinance(s, state.filieres, state.payments);
+              return (
+                <div key={s.id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs font-semibold text-[#0b1f3f]">
+                        {s.matricule}
+                      </p>
+                      <p className="font-semibold text-sm text-[#161e2e] truncate">
+                        {s.nom} {s.prenom}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {s.filiereCode} {s.niveau} · {s.campus}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium shrink-0 ${
+                        fin.statutFinancier === 'Soldé'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : fin.statutFinancier === 'Retard critique'
+                          ? 'bg-red-50 text-red-700'
+                          : 'bg-amber-50 text-amber-800'
+                      }`}
+                    >
+                      {fin.statutFinancier} ({fin.tauxCouverture}%)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs bg-[#f8f9fb] border border-[#e3e7ef] rounded-lg p-2.5 font-mono tabular-nums">
+                    <div>
+                      <span className="font-sans text-[10px] uppercase text-slate-500 block">Dû</span>
+                      <span>{formatFCFA(fin.totalDu)}</span>
+                    </div>
+                    <div>
+                      <span className="font-sans text-[10px] uppercase text-slate-500 block">Payé</span>
+                      <span className="font-semibold text-emerald-700">{formatFCFA(fin.totalPaye)}</span>
+                    </div>
+                    <div>
+                      <span className="font-sans text-[10px] uppercase text-slate-500 block">Reste</span>
+                      <span className="font-semibold text-[#161e2e]">{formatFCFA(fin.resteAPayer)}</span>
+                    </div>
+                  </div>
+                  {fin.resteAPayer > 0 && (
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onNotify(
+                            `Relance préparée pour ${s.tuteurNom} (${s.tuteurTel || s.telephone}) : solde dû ${formatFCFA(fin.resteAPayer)}.`
+                          )
+                        }
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-[#e3e7ef] text-xs font-medium text-[#0b1f3f] cursor-pointer"
+                      >
+                        <Bell className="w-3 h-3" />
+                        Relancer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm((prev) => ({
+                            ...prev,
+                            studentId: s.id,
+                            montant: Math.min(150000, fin.resteAPayer),
+                          }));
+                          setModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded bg-[#0b1f3f] text-white text-xs font-medium cursor-pointer"
+                      >
+                        Encaisser
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="bg-[#f8f9fb] border-b border-[#e3e7ef] text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -382,9 +514,9 @@ export function FinanceView({
 
       {/* Record Payment Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-4">
-          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07142b]/70 p-3 sm:p-4">
+          <div className="bg-white border border-[#e3e7ef] rounded-xl w-full max-w-lg shadow-xl overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#e3e7ef] bg-[#f8f9fb] shrink-0">
               <h3 className="text-base font-semibold text-[#161e2e]">
                 Enregistrer un encaissement Caisse
               </h3>
@@ -396,7 +528,7 @@ export function FinanceView({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   Étudiant concerné
@@ -419,7 +551,7 @@ export function FinanceView({
                     ))}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">
                     Motif du versement
@@ -457,7 +589,7 @@ export function FinanceView({
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">
                     Montant (FCFA) *
@@ -536,7 +668,7 @@ export function FinanceView({
                   docRef={receipt.numeroRecu}
                 />
 
-                <div className="grid grid-cols-2 gap-4 p-4 border border-[#e3e7ef] rounded-lg">
+                <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-4 p-4 border border-[#e3e7ef] rounded-lg">
                   <div>
                     <p className="text-slate-500">Reçu de</p>
                     <p className="font-bold text-sm text-[#161e2e] mt-0.5">
@@ -546,7 +678,7 @@ export function FinanceView({
                       {st?.matricule} · {st?.filiereCode} {st?.niveau}
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="sm:text-right print:text-right">
                     <p className="text-slate-500">Montant encaissé</p>
                     <p className="font-mono text-lg font-bold text-emerald-700 tabular-nums mt-0.5">
                       {formatFCFA(receipt.montant)}
@@ -557,7 +689,7 @@ export function FinanceView({
                   </div>
                 </div>
 
-                <div className="p-4 border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] flex items-center justify-between">
+                <div className="p-4 border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] flex flex-col sm:flex-row print:flex-row items-start sm:items-center print:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <p>
                       Motif du règlement : <strong>{receipt.motif}</strong>
@@ -579,7 +711,7 @@ export function FinanceView({
                   />
                 </div>
 
-                <div className="flex items-center justify-between pt-6">
+                <div className="flex flex-col sm:flex-row print:flex-row items-start sm:items-center print:items-center justify-between gap-4 pt-6">
                   <p className="text-slate-500">Caissier(ère) : {receipt.caissier}</p>
                   <div className="text-center w-52">
                     <p className="font-semibold text-slate-700">Cachet & Signature Caisse</p>
@@ -605,41 +737,43 @@ export function FinanceView({
               docTitle="État des Recouvrements"
               docRef={`REC-ETAT-${new Date().toISOString().slice(0, 10)}`}
             />
-            <table className="w-full text-left border-collapse border border-[#e3e7ef]">
-              <thead>
-                <tr className="bg-[#0b1f3f] text-white text-[11px] uppercase">
-                  <th className="py-2 px-3">Matricule</th>
-                  <th className="py-2 px-3">Étudiant</th>
-                  <th className="py-2 px-3 text-right">Dû</th>
-                  <th className="py-2 px-3 text-right">Payé</th>
-                  <th className="py-2 px-3 text-right">Reste</th>
-                  <th className="py-2 px-3">Statut</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e3e7ef]">
-                {students.map((s) => {
-                  const fin = computeStudentFinance(s, state.filieres, state.payments);
-                  return (
-                    <tr key={s.id}>
-                      <td className="py-2 px-3 font-mono">{s.matricule}</td>
-                      <td className="py-2 px-3 font-medium">
-                        {s.nom} {s.prenom} ({s.filiereCode} {s.niveau})
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono tabular-nums">
-                        {formatFCFA(fin.totalDu)}
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono tabular-nums">
-                        {formatFCFA(fin.totalPaye)}
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono font-bold tabular-nums">
-                        {formatFCFA(fin.resteAPayer)}
-                      </td>
-                      <td className="py-2 px-3">{fin.statutFinancier}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-full text-left border-collapse border border-[#e3e7ef]">
+                <thead>
+                  <tr className="bg-[#0b1f3f] text-white text-[11px] uppercase">
+                    <th className="py-2 px-3">Matricule</th>
+                    <th className="py-2 px-3">Étudiant</th>
+                    <th className="py-2 px-3 text-right">Dû</th>
+                    <th className="py-2 px-3 text-right">Payé</th>
+                    <th className="py-2 px-3 text-right">Reste</th>
+                    <th className="py-2 px-3">Statut</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#e3e7ef]">
+                  {students.map((s) => {
+                    const fin = computeStudentFinance(s, state.filieres, state.payments);
+                    return (
+                      <tr key={s.id}>
+                        <td className="py-2 px-3 font-mono">{s.matricule}</td>
+                        <td className="py-2 px-3 font-medium">
+                          {s.nom} {s.prenom} ({s.filiereCode} {s.niveau})
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums">
+                          {formatFCFA(fin.totalDu)}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums">
+                          {formatFCFA(fin.totalPaye)}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-bold tabular-nums">
+                          {formatFCFA(fin.resteAPayer)}
+                        </td>
+                        <td className="py-2 px-3">{fin.statutFinancier}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </PrintModal>
       )}

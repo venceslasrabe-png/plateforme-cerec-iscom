@@ -182,8 +182,22 @@ export interface MissionTask {
   statut: 'À faire' | 'En cours' | 'Terminé';
 }
 
+export type TrimesterStatus = 'Planifié' | 'En cours' | 'Clôturé';
+
+export interface Trimester {
+  id: string;
+  code: string; // e.g., 'T1', 'T2', 'T3'
+  nom: string; // e.g., '1er Trimestre'
+  anneeAcademique: string;
+  dateDebut: string;
+  dateFin: string;
+  statut: TrimesterStatus;
+  semestreAssocie?: string;
+}
+
 export interface LmdSettings {
   anneeAcademique: string;
+  trimestreActifId?: string;
   seuilValidation: number; // 10
   poidsCC: number; // 0.4
   poidsExamen: number; // 0.6
@@ -205,4 +219,5 @@ export interface CerecState {
   missions: MissionTask[];
   settings: LmdSettings;
   academicYears?: string[];
+  trimestres?: Trimester[];
 }

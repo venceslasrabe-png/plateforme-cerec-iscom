@@ -159,8 +159,8 @@ export function AttendanceView({
           />
         </div>
 
-        <form onSubmit={handleQuickScan} className="lg:col-span-5 flex items-end gap-2">
-          <div className="flex-1">
+        <form onSubmit={handleQuickScan} className="lg:col-span-5 flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+          <div className="flex-1 min-w-0">
             <label className="block text-xs font-medium text-slate-600 mb-1">
               Scan QR Badge ou Matricule rapide
             </label>
@@ -249,7 +249,71 @@ export function AttendanceView({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Mobile Roll Call Cards */}
+        <div className="md:hidden divide-y divide-[#e3e7ef]">
+          {classStudents.map((s) => {
+            const current = getStatus(s.id);
+            const absTotal = absenceCounts.get(s.id) ?? 0;
+            return (
+              <div key={s.id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs font-semibold text-[#0b1f3f]">{s.matricule}</p>
+                    <p className="font-semibold text-sm text-[#161e2e] truncate">
+                      {s.nom} {s.prenom}
+                    </p>
+                    <p className="text-xs text-slate-500">{s.campus}</p>
+                  </div>
+                  <span
+                    className={`font-mono text-xs tabular-nums shrink-0 ${
+                      absTotal >= state.settings.seuilAbsencesAlerte
+                        ? 'text-red-700 font-bold'
+                        : 'text-slate-600'
+                    }`}
+                  >
+                    {absTotal} abs.
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(['Présent', 'Retard', 'Absent', 'Justifié'] as AttendanceStatus[]).map(
+                    (st) => {
+                      const active = current === st;
+                      const activeClass =
+                        st === 'Présent'
+                          ? 'bg-emerald-700 text-white border-emerald-700'
+                          : st === 'Retard'
+                          ? 'bg-amber-600 text-white border-amber-600'
+                          : st === 'Absent'
+                          ? 'bg-red-700 text-white border-red-700'
+                          : 'bg-[#0b1f3f] text-white border-[#0b1f3f]';
+                      return (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => markStatus(s.id, st)}
+                          className={`px-2.5 py-2 rounded border text-xs font-medium transition-colors cursor-pointer ${
+                            active
+                              ? activeClass
+                              : 'border-[#e3e7ef] text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {classStudents.length === 0 && (
+            <div className="py-8 px-4 text-center text-sm text-slate-500">
+              Aucun étudiant inscrit dans cette classe pour le filtre campus actuel.
+            </div>
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="border-b border-[#e3e7ef] text-[11px] font-semibold uppercase tracking-wider text-slate-500">

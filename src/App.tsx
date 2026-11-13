@@ -4,11 +4,13 @@ import {
   BookOpen,
   Briefcase,
   CalendarPlus,
+  CalendarRange,
   CheckSquare,
   CreditCard,
   Download,
   FileSpreadsheet,
   LayoutDashboard,
+  LogOut,
   Megaphone,
   Menu,
   Settings,
@@ -18,6 +20,8 @@ import {
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { CreateAcademicYearModal } from './components/CreateAcademicYearModal';
+import { CreateTrimesterModal } from './components/CreateTrimesterModal';
+import { AuthSession, LoginPage } from './components/LoginPage';
 import { AcademicView } from './components/modules/AcademicView';
 import { AttendanceView } from './components/modules/AttendanceView';
 import { CommunicationView } from './components/modules/CommunicationView';
@@ -45,6 +49,7 @@ import {
   Payment,
   ScheduleSlot,
   Student,
+  Trimester,
   UE,
   UserRole,
 } from './types/cerec';
@@ -56,6 +61,7 @@ import {
 
 const STORAGE_KEY = 'cerec_iscom_lmd_state_v1';
 const ROLE_KEY = 'cerec_iscom_active_role_v1';
+const AUTH_SESSION_KEY = 'cerec_iscom_auth_session_v1';
 
 interface NavItem {
   id: ModuleId;
@@ -183,7 +189,23 @@ export default function App() {
             option: s.option ?? seedMatch?.option ?? fil?.options[0],
           };
         });
-        return { ...seed, ...parsed, filieres, ues, students };
+        const trimestres =
+          Array.isArray(parsed.trimestres) && parsed.trimestres.length > 0
+            ? parsed.trimestres
+            : seed.trimestres ?? [];
+        const settings: LmdSettings = {
+          ...seed.settings,
+          ...(parsed.settings ?? {}),
+          trimestreActifId:
+            parsed.settings?.trimestreActifId ??
+            trimestres.find(
+              (t) =>
+                t.anneeAcademique === (parsed.settings?.anneeAcademique ?? seed.settings.anneeAcademique) &&
+                t.statut === 'En cours'
+            )?.id ??
+            seed.settings.trimestreActifId,
+        };
+        return { ...seed, ...parsed, filieres, ues, students, trimestres, settings };
       }
     } catch {
       // ignore storage errors
@@ -191,17 +213,56 @@ export default function App() {
     return seed;
   });
 
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => {
+    try {
+      const saved = localStorage.getItem(AUTH_SESSION_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as AuthSession;
+        if (parsed && parsed.email && ROLE_ALLOWED_MODULES[parsed.role]) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return null;
+  });
+
   const [activeRole, setActiveRole] = useState<UserRole>(() => {
+    try {
+      const savedSession = localStorage.getItem(AUTH_SESSION_KEY);
+      if (savedSession) {
+        const parsed = JSON.parse(savedSession) as AuthSession;
+        if (parsed?.role && ROLE_ALLOWED_MODULES[parsed.role]) {
+          return parsed.role;
+        }
+      }
+    } catch {
+      // ignore
+    }
     const saved = localStorage.getItem(ROLE_KEY) as UserRole | null;
     return saved && ROLE_ALLOWED_MODULES[saved] ? saved : 'admin';
   });
 
   const [activeModule, setActiveModule] = useState<ModuleId>('dash');
   const [moduleHistory, setModuleHistory] = useState<ModuleId[]>([]);
-  const [campusFilter, setCampusFilter] = useState<Campus | 'Tous'>('Tous');
+  const [campusFilter, setCampusFilter] = useState<Campus | 'Tous'>(() => {
+    try {
+      const savedSession = localStorage.getItem(AUTH_SESSION_KEY);
+      if (savedSession) {
+        const parsed = JSON.parse(savedSession) as AuthSession;
+        if (parsed?.campus) return parsed.campus;
+      }
+    } catch {
+      // ignore
+    }
+    return 'Tous';
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [createYearOpen, setCreateYearOpen] = useState(false);
+  const [createTrimesterOpen, setCreateTrimesterOpen] = useState(false);
+  const [editingTrimester, setEditingTrimester] = useState<Trimester | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -247,6 +308,35 @@ export default function App() {
     window.setTimeout(() => {
       setToast((prev) => (prev === message ? null : prev));
     }, 3500);
+  };
+
+  const handleLogin = (session: AuthSession) => {
+    setAuthSession(session);
+    setActiveRole(session.role);
+    setCampusFilter(session.campus);
+    setModuleHistory([]);
+    setActiveModule(ROLE_ALLOWED_MODULES[session.role][0] ?? 'dash');
+    try {
+      if (session.remember) {
+        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+      } else {
+        localStorage.removeItem(AUTH_SESSION_KEY);
+      }
+    } catch {
+      // ignore storage errors
+    }
+    notify(`Bienvenue, ${session.displayName}.`);
+  };
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem(AUTH_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+    setAuthSession(null);
+    setMobileMenuOpen(false);
+    setModuleHistory([]);
   };
 
   const visibleNav = NAV_ITEMS.filter((item) =>
@@ -584,6 +674,118 @@ export default function App() {
     notify(`Année académique ${result.year} créée${details}.`);
   };
 
+  const handleSaveTrimester = (trimester: Trimester, activate: boolean) => {
+    setState((prev) => {
+      const list = prev.trimestres ?? [];
+      const exists = list.some((t) => t.id === trimester.id);
+      const updatedList = exists
+        ? list.map((t) => (t.id === trimester.id ? trimester : t))
+        : [...list, trimester];
+      const normalized = activate
+        ? updatedList.map((t) =>
+            t.id === trimester.id
+              ? { ...t, statut: 'En cours' as const }
+              : t.anneeAcademique === trimester.anneeAcademique && t.statut === 'En cours'
+              ? { ...t, statut: 'Planifié' as const }
+              : t
+          )
+        : updatedList;
+      return {
+        ...prev,
+        trimestres: normalized,
+        settings: activate
+          ? {
+              ...prev.settings,
+              anneeAcademique: trimester.anneeAcademique,
+              trimestreActifId: trimester.id,
+            }
+          : prev.settings,
+      };
+    });
+    setCreateTrimesterOpen(false);
+    setEditingTrimester(null);
+    notify(
+      `Trimestre ${trimester.code} (${trimester.anneeAcademique}) enregistré${
+        activate ? ' et activé' : ''
+      }.`
+    );
+  };
+
+  const handleGenerateTrimesterBatch = (
+    created: Trimester[],
+    year: string,
+    activateFirst: boolean
+  ) => {
+    setState((prev) => {
+      const list = prev.trimestres ?? [];
+      const first = created[0];
+      const merged = [...list, ...created];
+      const normalized =
+        activateFirst && first
+          ? merged.map((t) =>
+              t.id === first.id
+                ? { ...t, statut: 'En cours' as const }
+                : t.anneeAcademique === year && t.statut === 'En cours'
+                ? { ...t, statut: 'Planifié' as const }
+                : t
+            )
+          : merged;
+      return {
+        ...prev,
+        trimestres: normalized,
+        settings:
+          activateFirst && first
+            ? {
+                ...prev.settings,
+                anneeAcademique: year,
+                trimestreActifId: first.id,
+              }
+            : prev.settings,
+      };
+    });
+    setCreateTrimesterOpen(false);
+    setEditingTrimester(null);
+    notify(`${created.length} trimestre(s) généré(s) pour ${year}.`);
+  };
+
+  const handleActivateTrimester = (trimesterId: string) => {
+    setState((prev) => {
+      const target = (prev.trimestres ?? []).find((t) => t.id === trimesterId);
+      if (!target) return prev;
+      return {
+        ...prev,
+        trimestres: (prev.trimestres ?? []).map((t) =>
+          t.id === target.id
+            ? { ...t, statut: 'En cours' as const }
+            : t.anneeAcademique === target.anneeAcademique && t.statut === 'En cours'
+            ? { ...t, statut: 'Planifié' as const }
+            : t
+        ),
+        settings: {
+          ...prev.settings,
+          anneeAcademique: target.anneeAcademique,
+          trimestreActifId: target.id,
+        },
+      };
+    });
+    const target = (state.trimestres ?? []).find((t) => t.id === trimesterId);
+    if (target) {
+      notify(`Trimestre actif : ${target.code} — ${target.nom} (${target.anneeAcademique}).`);
+    }
+  };
+
+  const handleDeleteTrimester = (trimesterId: string) => {
+    setState((prev) => ({
+      ...prev,
+      trimestres: (prev.trimestres ?? []).filter((t) => t.id !== trimesterId),
+      settings:
+        prev.settings.trimestreActifId === trimesterId
+          ? { ...prev.settings, trimestreActifId: undefined }
+          : prev.settings,
+    }));
+    notify('Trimestre supprimé.');
+  };
+
   const executeResetDemo = () => {
     const fresh = createInitialSeedData();
     setState(fresh);
@@ -637,26 +839,44 @@ export default function App() {
         })}
       </nav>
 
-      {/* Quick Role Switcher in Sidebar Footer */}
-      <div className="p-4 border-t border-white/10 bg-[#07142b]/60 space-y-2">
-        <label
-          htmlFor="role-switcher"
-          className="block text-[11px] text-slate-400 font-medium"
+      {/* Quick Role Switcher & Session Controls in Sidebar Footer */}
+      <div className="p-4 border-t border-white/10 bg-[#07142b]/60 space-y-2.5">
+        {authSession && (
+          <div className="pb-2 border-b border-white/10">
+            <p className="text-xs font-semibold text-white truncate">
+              {authSession.displayName}
+            </p>
+            <p className="text-[11px] text-slate-400 truncate">{authSession.email}</p>
+          </div>
+        )}
+        <div className="space-y-1">
+          <label
+            htmlFor="role-switcher"
+            className="block text-[11px] text-slate-400 font-medium"
+          >
+            Espace actif
+          </label>
+          <select
+            id="role-switcher"
+            value={activeRole}
+            onChange={(e) => setActiveRole(e.target.value as UserRole)}
+            className="w-full px-2.5 py-2 rounded-lg bg-[#143263] border border-white/15 text-xs font-medium text-white focus:outline-none focus:border-[#e0a526]"
+          >
+            {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-white/15 bg-white/5 hover:bg-red-950/60 hover:border-red-400/40 text-xs font-semibold text-slate-200 hover:text-white transition-colors cursor-pointer"
         >
-          Espace actif
-        </label>
-        <select
-          id="role-switcher"
-          value={activeRole}
-          onChange={(e) => setActiveRole(e.target.value as UserRole)}
-          className="w-full px-2.5 py-2 rounded-lg bg-[#143263] border border-white/15 text-xs font-medium text-white focus:outline-none focus:border-[#e0a526]"
-        >
-          {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
-            <option key={r} value={r}>
-              {ROLE_LABELS[r]}
-            </option>
-          ))}
-        </select>
+          <LogOut className="w-3.5 h-3.5 text-[#eab33a]" />
+          Déconnexion
+        </button>
         <p className="text-[11px] text-slate-400 truncate">
           Pointe-Noire & Brazzaville · Congo
         </p>
@@ -664,8 +884,21 @@ export default function App() {
     </div>
   );
 
+  if (!authSession) {
+    return (
+      <LoginPage
+        activeAcademicYear={state.settings.anneeAcademique}
+        onLogin={handleLogin}
+      />
+    );
+  }
+
+  const activeYearTrimesters = (state.trimestres ?? [])
+    .filter((t) => t.anneeAcademique === state.settings.anneeAcademique)
+    .sort((a, b) => a.code.localeCompare(b.code));
+
   return (
-    <div className="min-h-screen flex bg-[#f8f9fb] text-[#161e2e]">
+    <div className="min-h-screen flex bg-[#f8f9fb] text-[#161e2e] overflow-x-hidden">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-64 shrink-0 sticky top-0 h-screen">
         {renderSidebarContent()}
@@ -678,7 +911,7 @@ export default function App() {
             className="fixed inset-0 bg-[#07142b]/70"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <aside className="relative w-64 max-w-[80vw] h-full z-10">
+          <aside className="relative w-64 max-w-[82vw] h-full z-10">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(false)}
@@ -695,39 +928,39 @@ export default function App() {
       {/* Workspace Main */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top Workspace Header */}
-        <header className="sticky top-0 z-30 bg-white border-b border-[#e3e7ef] px-4 sm:px-6 py-3.5 flex items-center justify-between gap-6">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Ouvrir le menu"
-              className="lg:hidden p-2 rounded-lg border border-[#e3e7ef] text-[#0b1f3f] hover:bg-slate-50 cursor-pointer"
-            >
-              <Menu className="w-4 h-4" />
-            </button>
-            {(activeModule !== 'dash' || moduleHistory.length > 0) && (
+        <header className="sticky top-0 z-30 bg-white border-b border-[#e3e7ef] px-3 sm:px-6 py-3 space-y-2.5">
+          <div className="flex items-center justify-between gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
               <button
                 type="button"
-                onClick={handleBack}
-                title="Revenir à l'écran précédent"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e3e7ef] hover:border-[#0b1f3f] bg-[#f8f9fb] hover:bg-slate-100 text-[#0b1f3f] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Ouvrir le menu"
+                className="lg:hidden p-2 rounded-lg border border-[#e3e7ef] text-[#0b1f3f] hover:bg-slate-50 shrink-0 cursor-pointer"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                Retour
+                <Menu className="w-4 h-4" />
               </button>
-            )}
-            <div className="min-w-0">
-              <h2 className="text-base sm:text-lg font-bold text-[#0b1f3f] truncate">
-                {currentMeta.label}
-              </h2>
-              <p className="text-xs text-slate-500 truncate hidden sm:block">
-                {currentMeta.subtitle}
-              </p>
+              {(activeModule !== 'dash' || moduleHistory.length > 0) && (
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  title="Revenir à l'écran précédent"
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#e3e7ef] hover:border-[#0b1f3f] bg-[#f8f9fb] hover:bg-slate-100 text-[#0b1f3f] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline sm:inline">Retour</span>
+                </button>
+              )}
+              <div className="min-w-0">
+                <h2 className="text-sm sm:text-lg font-bold text-[#0b1f3f] truncate">
+                  {currentMeta.label}
+                </h2>
+                <p className="text-xs text-slate-500 truncate hidden md:block">
+                  {currentMeta.subtitle}
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <div className="hidden md:flex items-center gap-1.5">
+            <div className="hidden md:flex items-center gap-2 shrink-0">
               <select
                 value={state.settings.anneeAcademique}
                 onChange={(e) => handleChangeActiveYear(e.target.value)}
@@ -741,6 +974,7 @@ export default function App() {
                   </option>
                 ))}
               </select>
+
               <button
                 type="button"
                 onClick={() => setCreateYearOpen(true)}
@@ -750,30 +984,137 @@ export default function App() {
                 <CalendarPlus className="w-3.5 h-3.5" />
                 <span className="hidden xl:inline">Nouvelle année</span>
               </button>
+
+              {activeYearTrimesters.length > 0 && (
+                <select
+                  value={state.settings.trimestreActifId ?? activeYearTrimesters[0]?.id ?? ''}
+                  onChange={(e) => handleActivateTrimester(e.target.value)}
+                  aria-label="Trimestre actif"
+                  title="Trimestre actif"
+                  className="px-2.5 py-2 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f] focus:outline-none focus:border-[#0b1f3f]"
+                >
+                  {activeYearTrimesters.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.code} · {t.nom}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingTrimester(null);
+                  setCreateTrimesterOpen(true);
+                }}
+                title="Créer un trimestre"
+                className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-[#0b1f3f]/25 hover:border-[#0b1f3f] bg-white text-[#0b1f3f] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <CalendarRange className="w-3.5 h-3.5 text-[#c58b12]" />
+                <span className="hidden xl:inline">Trimestre</span>
+              </button>
+
+              <select
+                value={campusFilter}
+                onChange={(e) => setCampusFilter(e.target.value as Campus | 'Tous')}
+                aria-label="Filtrer par campus"
+                className="px-2.5 py-2 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f] focus:outline-none focus:border-[#0b1f3f]"
+              >
+                <option value="Tous">Tous campus</option>
+                <option value="Pointe-Noire">Pointe-Noire</option>
+                <option value="Brazzaville">Brazzaville</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => {
+                  exportCerecToExcel(state, { scope: 'all' });
+                  notify('Export Excel classé par année académique (.xlsx) téléchargé.');
+                }}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-[#eab33a]" />
+                <span className="hidden lg:inline">Exporter Excel</span>
+              </button>
             </div>
+          </div>
+
+          {/* Mobile & Small Tablet Quick Controls Bar */}
+          <div className="flex md:hidden flex-wrap items-center gap-2 pt-2 border-t border-[#e3e7ef]">
+            <select
+              value={state.settings.anneeAcademique}
+              onChange={(e) => handleChangeActiveYear(e.target.value)}
+              aria-label="Année académique active mobile"
+              className="flex-1 min-w-[110px] px-2.5 py-1.5 text-xs font-mono font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f]"
+            >
+              {getAvailableAcademicYears(state).map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+
+            {activeYearTrimesters.length > 0 && (
+              <select
+                value={state.settings.trimestreActifId ?? activeYearTrimesters[0]?.id ?? ''}
+                onChange={(e) => handleActivateTrimester(e.target.value)}
+                aria-label="Trimestre actif mobile"
+                className="flex-1 min-w-[110px] px-2.5 py-1.5 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f]"
+              >
+                {activeYearTrimesters.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.code} · {t.nom}
+                  </option>
+                ))}
+              </select>
+            )}
 
             <select
               value={campusFilter}
               onChange={(e) => setCampusFilter(e.target.value as Campus | 'Tous')}
-              aria-label="Filtrer par campus"
-              className="px-3 py-2 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f] focus:outline-none focus:border-[#0b1f3f]"
+              aria-label="Filtrer par campus mobile"
+              className="flex-1 min-w-[115px] px-2.5 py-1.5 text-xs font-semibold border border-[#e3e7ef] rounded-lg bg-[#f8f9fb] text-[#0b1f3f]"
             >
-              <option value="Tous">Tous les campus</option>
-              <option value="Pointe-Noire">Campus Pointe-Noire</option>
-              <option value="Brazzaville">Campus Brazzaville</option>
+              <option value="Tous">Tous campus</option>
+              <option value="Pointe-Noire">Pointe-Noire</option>
+              <option value="Brazzaville">Brazzaville</option>
             </select>
 
-            <button
-              type="button"
-              onClick={() => {
-                exportCerecToExcel(state, { scope: 'all' });
-                notify('Export Excel classé par année académique (.xlsx) téléchargé.');
-              }}
-              className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#0b1f3f] hover:bg-[#143263] text-white text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5 text-[#eab33a]" />
-              Exporter Excel
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setCreateYearOpen(true)}
+                title="Nouvelle année académique"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#e0a526] text-[#07142b] text-xs font-bold cursor-pointer"
+              >
+                <CalendarPlus className="w-3.5 h-3.5" />
+                Année
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingTrimester(null);
+                  setCreateTrimesterOpen(true);
+                }}
+                title="Créer un trimestre"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#e3e7ef] bg-white text-[#0b1f3f] text-xs font-semibold cursor-pointer"
+              >
+                <CalendarRange className="w-3.5 h-3.5 text-[#c58b12]" />
+                Trim.
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  exportCerecToExcel(state, { scope: 'all' });
+                  notify('Export Excel (.xlsx) téléchargé.');
+                }}
+                title="Exporter Excel"
+                aria-label="Exporter Excel"
+                className="inline-flex items-center justify-center p-1.5 rounded-lg bg-[#0b1f3f] text-white cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-[#eab33a]" />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -811,6 +1152,16 @@ export default function App() {
               onAddSchedule={handleAddSchedule}
               onUpdateSchedule={handleUpdateSchedule}
               onDeleteSchedule={handleDeleteSchedule}
+              onOpenCreateTrimester={() => {
+                setEditingTrimester(null);
+                setCreateTrimesterOpen(true);
+              }}
+              onEditTrimester={(t) => {
+                setEditingTrimester(t);
+                setCreateTrimesterOpen(true);
+              }}
+              onActivateTrimester={handleActivateTrimester}
+              onDeleteTrimester={handleDeleteTrimester}
             />
           )}
           {activeModule === 'pres' && (
@@ -890,7 +1241,12 @@ export default function App() {
               onUpdateSettings={handleUpdateSettings}
               onImportState={handleImportState}
               onOpenCreateYear={() => setCreateYearOpen(true)}
+              onOpenCreateTrimester={() => {
+                setEditingTrimester(null);
+                setCreateTrimesterOpen(true);
+              }}
               onActivateYear={handleChangeActiveYear}
+              onActivateTrimester={handleActivateTrimester}
               onResetDemo={() => setConfirmResetOpen(true)}
               onNotify={notify}
             />
@@ -904,6 +1260,20 @@ export default function App() {
           state={state}
           onClose={() => setCreateYearOpen(false)}
           onCreated={handleAcademicYearCreated}
+        />
+      )}
+
+      {/* Create / Edit Trimester Modal */}
+      {createTrimesterOpen && (
+        <CreateTrimesterModal
+          state={state}
+          editing={editingTrimester}
+          onClose={() => {
+            setCreateTrimesterOpen(false);
+            setEditingTrimester(null);
+          }}
+          onSaveSingle={handleSaveTrimester}
+          onGenerateBatch={handleGenerateTrimesterBatch}
         />
       )}
 
