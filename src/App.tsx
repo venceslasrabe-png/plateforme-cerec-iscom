@@ -18,7 +18,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CreateAcademicYearModal } from './components/CreateAcademicYearModal';
 import { CreateTrimesterModal } from './components/CreateTrimesterModal';
 import { AuthSession, LoginPage } from './components/LoginPage';
@@ -69,12 +69,80 @@ import {
   getRoleDefinition,
   getRolePermissions,
   ORDERED_ROLES,
-  ROLE_DEFINITIONS,
 } from './utils/permissions';
+import { sanitizeRecordDeep } from './utils/security';
 
-const STORAGE_KEY = 'cerec_iscom_lmd_state_v1';
-const ROLE_KEY = 'cerec_iscom_active_role_v1';
-const AUTH_SESSION_KEY = 'cerec_iscom_auth_session_v1';
+const LEGACY_STORAGE_KEYS = [
+  'cerec_iscom_lmd_state_v1',
+  'cerec_iscom_active_role_v1',
+  'cerec_iscom_auth_session_v1',
+];
+
+function normalizeHydratedState(parsed: Partial<CerecState> | null | undefined): CerecState {
+  const seed = createInitialSeedData();
+  if (!parsed) return seed;
+
+  const filieres = (parsed.filieres ?? seed.filieres).map((f) => {
+    const seedMatch = seed.filieres.find((sf) => sf.code === f.code);
+    return {
+      ...f,
+      options:
+        Array.isArray(f.options) && f.options.length > 0
+          ? f.options
+          : seedMatch?.options ?? ['Option générale'],
+    };
+  });
+  const ues = (parsed.ues ?? seed.ues).map((u) => {
+    const seedMatch = seed.ues.find((su) => su.id === u.id || su.code === u.code);
+    return {
+      ...u,
+      option: u.option ?? seedMatch?.option ?? 'Tronc commun',
+    };
+  });
+  const students = (parsed.students ?? seed.students).map((s) => {
+    const seedMatch = seed.students.find((ss) => ss.id === s.id);
+    const fil = filieres.find((f) => f.code === s.filiereCode);
+    return {
+      ...s,
+      option: s.option ?? seedMatch?.option ?? fil?.options[0],
+    };
+  });
+  const trimestres =
+    Array.isArray(parsed.trimestres) && parsed.trimestres.length > 0
+      ? parsed.trimestres
+      : seed.trimestres ?? [];
+  const rawNotifications = Array.isArray(parsed.notifications)
+    ? parsed.notifications
+    : seed.notifications ?? [];
+  const notifications = rawNotifications.map((n) =>
+    n.targetRoles.includes('dg') && !n.targetRoles.includes('direction')
+      ? { ...n, targetRoles: [...n.targetRoles, 'direction' as UserRole] }
+      : n
+  );
+  const settings: LmdSettings = {
+    ...seed.settings,
+    ...(parsed.settings ?? {}),
+    trimestreActifId:
+      parsed.settings?.trimestreActifId ??
+      trimestres.find(
+        (t) =>
+          t.anneeAcademique === (parsed.settings?.anneeAcademique ?? seed.settings.anneeAcademique) &&
+          t.statut === 'En cours'
+      )?.id ??
+      seed.settings.trimestreActifId,
+  };
+
+  return sanitizeRecordDeep({
+    ...seed,
+    ...parsed,
+    filieres,
+    ues,
+    students,
+    trimestres,
+    notifications,
+    settings,
+  });
+}
 
 interface NavItem {
   id: ModuleId;
@@ -153,123 +221,14 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function App() {
-  const [state, setState] = useState<CerecState>(() => {
-    const seed = createInitialSeedData();
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as CerecState;
-        const filieres = (parsed.filieres ?? seed.filieres).map((f) => {
-          const seedMatch = seed.filieres.find((sf) => sf.code === f.code);
-          return {
-            ...f,
-            options:
-              Array.isArray(f.options) && f.options.length > 0
-                ? f.options
-                : seedMatch?.options ?? ['Option générale'],
-          };
-        });
-        const ues = (parsed.ues ?? seed.ues).map((u) => {
-          const seedMatch = seed.ues.find((su) => su.id === u.id || su.code === u.code);
-          return {
-            ...u,
-            option: u.option ?? seedMatch?.option ?? 'Tronc commun',
-          };
-        });
-        const students = (parsed.students ?? seed.students).map((s) => {
-          const seedMatch = seed.students.find((ss) => ss.id === s.id);
-          const fil = filieres.find((f) => f.code === s.filiereCode);
-          return {
-            ...s,
-            option: s.option ?? seedMatch?.option ?? fil?.options[0],
-          };
-        });
-        const trimestres =
-          Array.isArray(parsed.trimestres) && parsed.trimestres.length > 0
-            ? parsed.trimestres
-            : seed.trimestres ?? [];
-        const rawNotifications = Array.isArray(parsed.notifications)
-          ? parsed.notifications
-          : seed.notifications ?? [];
-        const notifications = rawNotifications.map((n) =>
-          n.targetRoles.includes('dg') && !n.targetRoles.includes('direction')
-            ? { ...n, targetRoles: [...n.targetRoles, 'direction' as UserRole] }
-            : n
-        );
-        const settings: LmdSettings = {
-          ...seed.settings,
-          ...(parsed.settings ?? {}),
-          trimestreActifId:
-            parsed.settings?.trimestreActifId ??
-            trimestres.find(
-              (t) =>
-                t.anneeAcademique === (parsed.settings?.anneeAcademique ?? seed.settings.anneeAcademique) &&
-                t.statut === 'En cours'
-            )?.id ??
-            seed.settings.trimestreActifId,
-        };
-        return {
-          ...seed,
-          ...parsed,
-          filieres,
-          ues,
-          students,
-          trimestres,
-          notifications,
-          settings,
-        };
-      }
-    } catch {
-      // ignore storage errors
-    }
-    return seed;
-  });
-
-  const [authSession, setAuthSession] = useState<AuthSession | null>(() => {
-    try {
-      const saved = localStorage.getItem(AUTH_SESSION_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as AuthSession;
-        if (parsed && parsed.email && ROLE_DEFINITIONS[parsed.role]) {
-          return parsed;
-        }
-      }
-    } catch {
-      // ignore storage errors
-    }
-    return null;
-  });
-
-  const [activeRole, setActiveRole] = useState<UserRole>(() => {
-    try {
-      const savedSession = localStorage.getItem(AUTH_SESSION_KEY);
-      if (savedSession) {
-        const parsed = JSON.parse(savedSession) as AuthSession;
-        if (parsed?.role && ROLE_DEFINITIONS[parsed.role]) {
-          return parsed.role;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    const saved = localStorage.getItem(ROLE_KEY) as UserRole | null;
-    return saved && ROLE_DEFINITIONS[saved] ? saved : 'dg';
-  });
-
+  const [state, setState] = useState<CerecState>(() => createInitialSeedData());
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [activeRole, setActiveRole] = useState<UserRole>('dg');
   const [activeModule, setActiveModule] = useState<ModuleId>('dash');
   const [moduleHistory, setModuleHistory] = useState<ModuleId[]>([]);
-  const [campusFilter, setCampusFilter] = useState<Campus | 'Tous'>(() => {
-    try {
-      const savedSession = localStorage.getItem(AUTH_SESSION_KEY);
-      if (savedSession) {
-        const parsed = JSON.parse(savedSession) as AuthSession;
-        if (parsed?.campus) return parsed.campus;
-      }
-    } catch {
-      // ignore
-    }
-    return 'Tous';
-  });
+  const [campusFilter, setCampusFilter] = useState<Campus | 'Tous'>('Tous');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [createYearOpen, setCreateYearOpen] = useState(false);
@@ -277,13 +236,125 @@ export default function App() {
   const [editingTrimester, setEditingTrimester] = useState<Trimester | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  const serverSyncedRef = useRef(false);
+  const skipNextSyncRef = useRef(false);
+
+  // Purge any legacy plaintext data in localStorage & hydrate HttpOnly session from server
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      for (const key of LEGACY_STORAGE_KEYS) {
+        localStorage.removeItem(key);
+      }
     } catch {
-      // ignore quota errors
+      // ignore storage access issues
     }
-  }, [state]);
+
+    let cancelled = false;
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        return (await res.json()) as {
+          authenticated?: boolean;
+          session?: AuthSession;
+          csrfToken?: string;
+        };
+      })
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.authenticated && data.session && data.csrfToken) {
+          setAuthSession(data.session);
+          setCsrfToken(data.csrfToken);
+          setActiveRole(data.session.role);
+          setCampusFilter(data.session.campus);
+          setActiveModule(getRoleDefinition(data.session.role).allowedModules[0] ?? 'dash');
+        }
+      })
+      .catch(() => {
+        // fallback to login screen
+      })
+      .finally(() => {
+        if (!cancelled) setAuthChecking(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load encrypted role-scoped state from server whenever session or active admin role changes
+  useEffect(() => {
+    if (!authSession) {
+      serverSyncedRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+    const effectiveRole = authSession.role === 'admin' ? activeRole : authSession.role;
+    fetch(`/api/state?role=${encodeURIComponent(effectiveRole)}`, {
+      credentials: 'include',
+    })
+      .then(async (res) => {
+        if (res.status === 401) {
+          setAuthSession(null);
+          setCsrfToken(null);
+          return null;
+        }
+        if (!res.ok) return null;
+        return (await res.json()) as { state?: CerecState };
+      })
+      .then((data) => {
+        if (cancelled || !data?.state) return;
+        skipNextSyncRef.current = true;
+        serverSyncedRef.current = true;
+        setState(normalizeHydratedState(data.state));
+      })
+      .catch(() => {
+        // keep current in-memory state on transient error
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession, activeRole]);
+
+  // Persist role-scoped mutations to encrypted server database (AES-256-GCM)
+  useEffect(() => {
+    if (!authSession || !csrfToken || !serverSyncedRef.current) return;
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false;
+      return;
+    }
+    const currentPerms = getRolePermissions(activeRole);
+    if (currentPerms.readOnly) return;
+
+    const timer = window.setTimeout(() => {
+      fetch('/api/state', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+        },
+        body: JSON.stringify({
+          activeRole,
+          state: sanitizeRecordDeep(state),
+        }),
+      })
+        .then(async (res) => {
+          if (res.status === 401) {
+            setAuthSession(null);
+            setCsrfToken(null);
+          }
+        })
+        .catch(() => {
+          // ignore network interruption
+        });
+    }, 120);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [state, authSession, activeRole, csrfToken]);
 
   const roleDef = getRoleDefinition(activeRole);
   const perms = getRolePermissions(activeRole);
@@ -295,7 +366,6 @@ export default function App() {
   }, [authSession, activeRole]);
 
   useEffect(() => {
-    localStorage.setItem(ROLE_KEY, activeRole);
     const allowed = getRoleDefinition(activeRole).allowedModules;
     if (!allowed.includes(activeModule)) {
       setActiveModule(allowed[0] ?? 'dash');
@@ -344,31 +414,30 @@ export default function App() {
     return true;
   };
 
-  const handleLogin = (session: AuthSession) => {
+  const handleLogin = (session: AuthSession, token: string) => {
+    serverSyncedRef.current = false;
+    setCsrfToken(token);
     setAuthSession(session);
     setActiveRole(session.role);
     setCampusFilter(session.campus);
     setModuleHistory([]);
     setActiveModule(getRoleDefinition(session.role).allowedModules[0] ?? 'dash');
-    try {
-      if (session.remember) {
-        localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
-      } else {
-        localStorage.removeItem(AUTH_SESSION_KEY);
-      }
-    } catch {
-      // ignore storage errors
-    }
-    notify(`Bienvenue, ${session.displayName}.`);
+    notify(`Bienvenue, ${session.displayName}. Session chiffrée active.`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     try {
-      localStorage.removeItem(AUTH_SESSION_KEY);
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
     } catch {
-      // ignore
+      // ignore network failures on logout
     }
+    serverSyncedRef.current = false;
+    setCsrfToken(null);
     setAuthSession(null);
+    setState(createInitialSeedData());
     setMobileMenuOpen(false);
     setModuleHistory([]);
   };
@@ -377,6 +446,7 @@ export default function App() {
   const currentMeta = NAV_ITEMS.find((n) => n.id === activeModule) ?? NAV_ITEMS[0];
 
   const handleMarkNotificationRead = (id: string) => {
+    skipNextSyncRef.current = true;
     setState((prev) => ({
       ...prev,
       notifications: (prev.notifications ?? []).map((n) =>
@@ -385,9 +455,21 @@ export default function App() {
           : n
       ),
     }));
+    if (csrfToken) {
+      fetch('/api/notifications/read', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+        },
+        body: JSON.stringify({ id }),
+      }).catch(() => {});
+    }
   };
 
   const handleMarkAllNotificationsRead = () => {
+    skipNextSyncRef.current = true;
     setState((prev) => ({
       ...prev,
       notifications: (prev.notifications ?? []).map((n) =>
@@ -398,6 +480,17 @@ export default function App() {
           : n
       ),
     }));
+    if (csrfToken) {
+      fetch('/api/notifications/read', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+        },
+        body: JSON.stringify({ all: true }),
+      }).catch(() => {});
+    }
   };
 
   // State Mutations (permission & read-only guarded)
@@ -1005,12 +1098,33 @@ export default function App() {
     notify('Trimestre supprimé.');
   };
 
-  const executeResetDemo = () => {
+  const executeResetDemo = async () => {
     if (!guardWrite(perms.canManageSystemSettings)) return;
-    const fresh = createInitialSeedData();
-    setState(fresh);
-    setConfirmResetOpen(false);
-    notify('Données de démonstration CEREC-ISCOM réinitialisées.');
+    try {
+      if (csrfToken) {
+        const res = await fetch('/api/security/reset-demo', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'X-CSRF-Token': csrfToken },
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { state?: CerecState };
+          if (data.state) {
+            skipNextSyncRef.current = true;
+            setState(normalizeHydratedState(data.state));
+          }
+        } else {
+          notify('Réinitialisation refusée par le serveur de sécurité.');
+          return;
+        }
+      } else {
+        setState(createInitialSeedData());
+      }
+      setConfirmResetOpen(false);
+      notify('Données de démonstration CEREC-ISCOM réinitialisées et rechiffrées.');
+    } catch {
+      notify('Erreur réseau lors de la réinitialisation.');
+    }
   };
 
   const renderSidebarContent = () => (
@@ -1122,6 +1236,25 @@ export default function App() {
       </div>
     </div>
   );
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#07142b] text-white gap-4 px-4">
+        <img
+          src={CEREC_LOGO_URL}
+          alt="Logo Groupe CEREC-ISCOM"
+          referrerPolicy="no-referrer"
+          className="w-16 h-16 object-contain rounded-xl bg-white p-1.5 shadow-lg"
+        />
+        <div className="text-center space-y-1">
+          <p className="font-serif text-lg font-bold tracking-tight">Groupe CEREC-ISCOM</p>
+          <p className="text-xs text-[#eab33a]">
+            Vérification de session chiffrée en cours…
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!authSession) {
     return (
@@ -1558,6 +1691,7 @@ export default function App() {
             <SettingsView
               state={state}
               activeRole={activeRole}
+              csrfToken={csrfToken}
               canSwitchRoles={authSession.role === 'admin'}
               canManageSettings={perms.canManageSystemSettings}
               canCreateAcademicYear={perms.canCreateAcademicYear}

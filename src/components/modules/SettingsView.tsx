@@ -6,11 +6,12 @@ import {
   CheckCircle2,
   Copy,
   Download,
-  Eye,
-  EyeOff,
   KeyRound,
+  Lock,
+  RefreshCw,
   RotateCcw,
   Shield,
+  ShieldCheck,
   Sliders,
   Upload,
   X,
@@ -27,9 +28,33 @@ import {
 } from '../../utils/lmd';
 import { COMPARTMENT_ACCOUNTS, ORDERED_ROLES } from '../../utils/permissions';
 
+interface SecurityAuditData {
+  posture: {
+    dbEncryption: string;
+    passwordHashing: string;
+    sessionProtection: string;
+    xssProtection: string;
+    xxeProtection: string;
+    apiKeysServerOnly: boolean;
+    geminiKeyConfigured: boolean;
+    rateLimitingActive: boolean;
+    auditCount: number;
+  };
+  auditLogs: {
+    id: string;
+    timestamp: string;
+    severity: 'info' | 'warning' | 'critical';
+    event: string;
+    actor: string;
+    ip: string;
+    detail: string;
+  }[];
+}
+
 interface SettingsViewProps {
   state: CerecState;
   activeRole: UserRole;
+  csrfToken?: string | null;
   canSwitchRoles?: boolean;
   canManageSettings?: boolean;
   canCreateAcademicYear?: boolean;
@@ -48,6 +73,7 @@ interface SettingsViewProps {
 export function SettingsView({
   state,
   activeRole,
+  csrfToken,
   canSwitchRoles = false,
   canManageSettings = true,
   canCreateAcademicYear = true,
@@ -68,12 +94,65 @@ export function SettingsView({
   const [importPreview, setImportPreview] = useState<ArchiveImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [lastImportSummary, setLastImportSummary] = useState<string | null>(null);
-  const [revealedAccessIds, setRevealedAccessIds] = useState<Record<string, boolean>>({});
-  const [revealAllAccess, setRevealAllAccess] = useState<boolean>(false);
+  const [rotatingEmail, setRotatingEmail] = useState<string | null>(null);
+  const [rotatedSecret, setRotatedSecret] = useState<{
+    email: string;
+    compartment: string;
+    password: string;
+  } | null>(null);
+  const [securityAudit, setSecurityAudit] = useState<SecurityAuditData | null>(null);
 
   useEffect(() => {
     setForm({ ...state.settings });
   }, [state.settings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/security/audit', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: SecurityAuditData | null) => {
+        if (!cancelled && data?.posture) {
+          setSecurityAudit(data);
+        }
+      })
+      .catch(() => {
+        // ignore if audit endpoint unavailable
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rotatedSecret]);
+
+  const handleRotatePassword = async (email: string, compartment: string) => {
+    if (!canManageSettings || !csrfToken || rotatingEmail) return;
+    setRotatingEmail(email);
+    try {
+      const res = await fetch('/api/auth/rotate-password', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+        },
+        body: JSON.stringify({ email }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        newPassword?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.newPassword) {
+        onNotify(data.error ?? 'Impossible de renouveler le mot de passe.');
+        return;
+      }
+      setRotatedSecret({ email, compartment, password: data.newPassword });
+      onNotify(`Mot de passe renouvelé côté serveur pour ${compartment}.`);
+    } catch {
+      onNotify('Erreur réseau lors du renouvellement du mot de passe.');
+    } finally {
+      setRotatingEmail(null);
+    }
+  };
 
   const allYears = getAvailableAcademicYears(state);
   const priorYears = allYears.filter((y) => y !== state.settings.anneeAcademique);
@@ -210,31 +289,57 @@ export function SettingsView({
             <KeyRound className="w-4 h-4 text-[#c58b12]" />
             <div>
               <h3 className="text-sm font-semibold text-[#161e2e]">
-                Identifiants & Accès par compartiment ({COMPARTMENT_ACCOUNTS.length})
+                Annuaire sécurisé des compartiments ({COMPARTMENT_ACCOUNTS.length})
               </h3>
               <p className="text-xs text-slate-500">
-                Adresse mail et mot de passe attribués à chaque service et campus (Pointe-Noire & Brazzaville)
+                Mots de passe hachés côté serveur (scrypt) — aucun secret n’est stocké en clair dans le navigateur
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setRevealAllAccess((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e3e7ef] bg-white hover:border-[#0b1f3f] text-xs font-semibold text-[#0b1f3f] cursor-pointer"
-          >
-            {revealAllAccess ? (
-              <>
-                <EyeOff className="w-3.5 h-3.5" />
-                Masquer les mots de passe
-              </>
-            ) : (
-              <>
-                <Eye className="w-3.5 h-3.5" />
-                Afficher tous les mots de passe
-              </>
-            )}
-          </button>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-800">
+            <Lock className="w-3.5 h-3.5" />
+            Stockage chiffré AES-256-GCM
+          </span>
         </div>
+
+        {rotatedSecret && (
+          <div className="mx-5 mt-4 p-3.5 rounded-lg bg-[#fff4d6] border border-[#e0a526] text-xs text-[#0b1f3f] flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-bold">
+                Nouveau mot de passe généré (affichage unique) — {rotatedSecret.compartment}
+              </p>
+              <p className="mt-1 font-mono">
+                Mail : <strong>{rotatedSecret.email}</strong> · Mot de passe :{' '}
+                <strong className="bg-white px-2 py-0.5 rounded border border-[#e0a526]">
+                  {rotatedSecret.password}
+                </strong>
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(
+                    `${rotatedSecret.compartment}\nMail : ${rotatedSecret.email}\nMot de passe : ${rotatedSecret.password}`
+                  );
+                  onNotify('Nouveaux identifiants copiés.');
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#0b1f3f] text-white font-semibold cursor-pointer"
+              >
+                <Copy className="w-3 h-3" />
+                Copier
+              </button>
+              <button
+                type="button"
+                onClick={() => setRotatedSecret(null)}
+                aria-label="Fermer le mot de passe temporaire"
+                className="p-1 text-slate-600 hover:text-[#0b1f3f] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
@@ -243,72 +348,143 @@ export function SettingsView({
                 <th className="py-3 px-4">Compartiment / Service</th>
                 <th className="py-3 px-4">Campus</th>
                 <th className="py-3 px-4">Adresse mail</th>
-                <th className="py-3 px-4">Mot de passe</th>
+                <th className="py-3 px-4">Protection</th>
                 <th className="py-3 px-4">Périmètre d’accès</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e3e7ef]">
-              {COMPARTMENT_ACCOUNTS.map((acc) => {
-                const isRevealed = revealAllAccess || Boolean(revealedAccessIds[acc.id]);
-                return (
-                  <tr key={acc.id} className="hover:bg-slate-50/70">
-                    <td className="py-2.5 px-4 font-semibold text-[#161e2e]">
-                      {acc.compartment}
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">
-                        {acc.campus}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4 font-mono text-[#0b1f3f] font-medium">
-                      {acc.email}
-                    </td>
-                    <td className="py-2.5 px-4 font-mono text-[#161e2e]">
-                      {isRevealed ? acc.password : '••••••••••••'}
-                    </td>
-                    <td className="py-2.5 px-4 text-slate-500">{acc.scopeSummary}</td>
-                    <td className="py-2.5 px-4 text-right">
-                      <div className="inline-flex items-center justify-end gap-1.5">
+              {COMPARTMENT_ACCOUNTS.map((acc) => (
+                <tr key={acc.id} className="hover:bg-slate-50/70">
+                  <td className="py-2.5 px-4 font-semibold text-[#161e2e]">
+                    {acc.compartment}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">
+                      {acc.campus}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-4 font-mono text-[#0b1f3f] font-medium">
+                    {acc.email}
+                  </td>
+                  <td className="py-2.5 px-4 font-mono text-emerald-700">
+                    scrypt · Cookie HttpOnly
+                  </td>
+                  <td className="py-2.5 px-4 text-slate-500">{acc.scopeSummary}</td>
+                  <td className="py-2.5 px-4 text-right">
+                    <div className="inline-flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(acc.email);
+                          onNotify(`Adresse mail copiée : ${acc.email}`);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-[#0b1f3f] font-semibold cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3" />
+                        Copier mail
+                      </button>
+                      {canManageSettings && (
                         <button
                           type="button"
-                          onClick={() =>
-                            setRevealedAccessIds((prev) => ({
-                              ...prev,
-                              [acc.id]: !isRevealed,
-                            }))
-                          }
-                          title={isRevealed ? 'Masquer' : 'Afficher'}
-                          className="p-1.5 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-slate-600 hover:text-[#0b1f3f] cursor-pointer"
+                          disabled={rotatingEmail === acc.email}
+                          onClick={() => handleRotatePassword(acc.email, acc.compartment)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#0b1f3f] hover:bg-[#143263] disabled:opacity-50 text-white font-semibold cursor-pointer"
                         >
-                          {isRevealed ? (
-                            <EyeOff className="w-3.5 h-3.5" />
-                          ) : (
-                            <Eye className="w-3.5 h-3.5" />
-                          )}
+                          <RefreshCw className="w-3 h-3 text-[#eab33a]" />
+                          {rotatingEmail === acc.email ? 'Rotation…' : 'Renouveler'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const text = `${acc.compartment}\nMail : ${acc.email}\nMot de passe : ${acc.password}`;
-                            navigator.clipboard?.writeText(text);
-                            onNotify(`Identifiants copiés : ${acc.compartment}`);
-                          }}
-                          title="Copier l'email et le mot de passe"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#e3e7ef] hover:border-[#0b1f3f] text-[#0b1f3f] font-semibold cursor-pointer"
-                        >
-                          <Copy className="w-3 h-3" />
-                          Copier
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Live Security & Encrypted DB Audit Summary */}
+      {securityAudit && (
+        <div className="bg-white border border-[#e3e7ef] rounded-lg p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#e3e7ef]">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-700" />
+              <div>
+                <h3 className="text-sm font-semibold text-[#161e2e]">
+                  Posture de Sécurité & Base de Données Chiffrée
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Contrôles actifs en temps réel sur le serveur CEREC-ISCOM
+                </p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
+              {securityAudit.posture.auditCount} événement(s) tracé(s)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+            <div className="p-3 rounded-lg bg-[#f8f9fb] border border-[#e3e7ef]">
+              <p className="text-slate-500">Base de données</p>
+              <p className="font-semibold text-[#0b1f3f] mt-0.5">
+                {securityAudit.posture.dbEncryption}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg bg-[#f8f9fb] border border-[#e3e7ef]">
+              <p className="text-slate-500">Clés API & Secrets</p>
+              <p className="font-semibold text-emerald-700 mt-0.5">
+                Strictement côté serveur (0 exposition client)
+              </p>
+            </div>
+            <div className="p-3 rounded-lg bg-[#f8f9fb] border border-[#e3e7ef]">
+              <p className="text-slate-500">Protection XSS / XXE / CSRF</p>
+              <p className="font-semibold text-[#0b1f3f] mt-0.5">
+                DOMPurify · CSP · Anti-XXE · Jeton CSRF
+              </p>
+            </div>
+          </div>
+
+          {securityAudit.auditLogs.length > 0 && (
+            <div className="overflow-x-auto border border-[#e3e7ef] rounded-lg">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#f8f9fb] border-b border-[#e3e7ef] text-[11px] uppercase text-slate-500">
+                    <th className="py-2 px-3">Horodatage</th>
+                    <th className="py-2 px-3">Événement</th>
+                    <th className="py-2 px-3">Acteur</th>
+                    <th className="py-2 px-3">Détail</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#e3e7ef]">
+                  {securityAudit.auditLogs.slice(0, 8).map((ev) => (
+                    <tr key={ev.id}>
+                      <td className="py-2 px-3 font-mono text-slate-500 whitespace-nowrap">
+                        {ev.timestamp.replace('T', ' ').slice(0, 19)}
+                      </td>
+                      <td className="py-2 px-3">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded font-mono text-[11px] font-semibold ${
+                            ev.severity === 'critical'
+                              ? 'bg-red-50 text-red-700'
+                              : ev.severity === 'warning'
+                              ? 'bg-amber-50 text-amber-800'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}
+                        >
+                          {ev.event}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 font-medium text-[#161e2e]">{ev.actor}</td>
+                      <td className="py-2 px-3 text-slate-600">{ev.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* LMD Parameters & Data Tools */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -515,7 +691,7 @@ export function SettingsView({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".xlsx,.xls,.csv"
+                  accept=".xlsx,.csv"
                   onChange={handleArchiveFileChange}
                   className="hidden"
                   aria-label="Sélectionner un fichier d'archives des années antérieures"

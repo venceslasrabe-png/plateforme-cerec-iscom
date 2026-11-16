@@ -1,4 +1,10 @@
-import * as XLSX from 'xlsx';
+import readXlsxFile from 'read-excel-file/browser';
+import writeXlsxFile, {
+  type Cell as WriteCell,
+  type Row as WriteRow,
+  type Sheet as WriteSheet,
+  type SheetData as WriteSheetData,
+} from 'write-excel-file/browser';
 import {
   Campus,
   CerecState,
@@ -13,6 +19,11 @@ import {
   Trimester,
   UE,
 } from '../types/cerec';
+import {
+  sanitizeImportedCell,
+  sanitizeSpreadsheetCell,
+  validateSpreadsheetUpload,
+} from './security';
 
 export function formatFCFA(amount: number): string {
   return `${Math.round(amount).toLocaleString('fr-FR')} FCFA`;
@@ -379,6 +390,116 @@ function safeSheetName(prefix: string, year: string): string {
   return `${prefix}_${cleanYear}`.slice(0, 31);
 }
 
+function toExcelCell(value: unknown, bold = false): WriteCell {
+  const safe = sanitizeSpreadsheetCell(value);
+  if (typeof safe === 'number') {
+    return bold ? { value: safe, type: Number, fontWeight: 'bold' } : { value: safe, type: Number };
+  }
+  if (typeof safe === 'boolean') {
+    return bold ? { value: safe, type: Boolean, fontWeight: 'bold' } : { value: safe, type: Boolean };
+  }
+  return bold ? { value: safe, type: String, fontWeight: 'bold' } : { value: safe, type: String };
+}
+
+function recordsToSheetData(
+  records: Record<string, string | number | boolean | null | undefined>[]
+): WriteSheetData {
+  if (records.length === 0) return [];
+  const headers = Array.from(
+    new Set(records.flatMap((r) => Object.keys(r)))
+  );
+  const headerRow: WriteRow = headers.map((h) => toExcelCell(h, true));
+  const dataRows: WriteRow[] = records.map((rec) =>
+    headers.map((h) => toExcelCell(rec[h] ?? ''))
+  );
+  return [headerRow, ...dataRows];
+}
+
+function parseCsvToMatrix(csvText: string): string[][] {
+  const rows: string[][] = [];
+  const lines = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const firstNonEmpty = lines.find((l) => l.trim().length > 0) ?? '';
+  const delimiter =
+    (firstNonEmpty.match(/;/g)?.length ?? 0) > (firstNonEmpty.match(/,/g)?.length ?? 0)
+      ? ';'
+      : ',';
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const cells: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === delimiter && !inQuotes) {
+        cells.push(sanitizeImportedCell(current));
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    cells.push(sanitizeImportedCell(current));
+    rows.push(cells);
+  }
+  return rows;
+}
+
+function matrixToObjectRows(matrix: unknown[][]): Record<string, unknown>[] {
+  if (matrix.length < 2) return [];
+  const headers = (matrix[0] ?? []).map((h) => sanitizeImportedCell(h));
+  const out: Record<string, unknown>[] = [];
+  for (let r = 1; r < matrix.length; r++) {
+    const line = matrix[r] ?? [];
+    if (line.every((c) => c === null || c === undefined || String(c).trim() === '')) {
+      continue;
+    }
+    const obj: Record<string, unknown> = Object.create(null);
+    headers.forEach((h, idx) => {
+      if (!h || h === '__proto__' || h === 'constructor' || h === 'prototype') return;
+      const cellVal = line[idx];
+      obj[h] =
+        typeof cellVal === 'number' || typeof cellVal === 'boolean'
+          ? cellVal
+          : sanitizeImportedCell(cellVal);
+    });
+    out.push(obj);
+  }
+  return out;
+}
+
+async function readSpreadsheetSheets(
+  file: File
+): Promise<{ name: string; matrix: unknown[][] }[]> {
+  const buffer = await file.arrayBuffer();
+  const kind = validateSpreadsheetUpload(file.name, buffer);
+
+  if (kind === 'csv') {
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+    return [{ name: 'Notes', matrix: parseCsvToMatrix(text) }];
+  }
+
+  const parsedSheets = await readXlsxFile(file);
+  return parsedSheets.map((s) => ({
+    name: sanitizeImportedCell(s.sheet) || 'Feuille',
+    matrix: s.data.map((row) =>
+      row.map((cell) =>
+        cell instanceof Date
+          ? cell.toISOString().slice(0, 10)
+          : typeof cell === 'number' || typeof cell === 'boolean'
+          ? cell
+          : sanitizeImportedCell(cell)
+      )
+    ),
+  }));
+}
+
 export function exportCerecToExcel(
   state: CerecState,
   options?: {
@@ -386,7 +507,7 @@ export function exportCerecToExcel(
     targetYear?: string;
   }
 ) {
-  const wb = XLSX.utils.book_new();
+  const sheets: WriteSheet<File>[] = [];
   const scope = options?.scope ?? 'all';
   const allYears = getAvailableAcademicYears(state);
   const currentYear = state.settings.anneeAcademique;
@@ -427,15 +548,14 @@ export function exportCerecToExcel(
       : scope === 'single' && options?.targetYear
       ? safeSheetName('Synthèse', options.targetYear)
       : 'Synthèse_Années';
-  XLSX.utils.book_append_sheet(
-    wb,
-    XLSX.utils.json_to_sheet(
+  sheets.push({
+    sheet: summarySheetName,
+    data: recordsToSheetData(
       summaryRows.length > 0
         ? summaryRows
         : [{ Information: 'Aucune donnée disponible pour la période sélectionnée.' }]
     ),
-    summarySheetName
-  );
+  });
 
   // 2. Sheets classified by Academic Year (Students, Grades, Cash Payments)
   selectedYears.forEach((year) => {
@@ -523,37 +643,34 @@ export function exportCerecToExcel(
       };
     });
 
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
+    sheets.push({
+      sheet: safeSheetName('Étud', year),
+      data: recordsToSheetData(
         studentRows.length > 0
           ? studentRows
           : [{ 'Année Académique': year, Information: 'Aucun étudiant enregistré' }]
       ),
-      safeSheetName('Étud', year)
-    );
+    });
 
     if (gradeRows.length > 0 || scope !== 'all') {
-      XLSX.utils.book_append_sheet(
-        wb,
-        XLSX.utils.json_to_sheet(
+      sheets.push({
+        sheet: safeSheetName('Notes', year),
+        data: recordsToSheetData(
           gradeRows.length > 0
             ? gradeRows
             : [{ 'Année Académique': year, Information: 'Aucune note enregistrée' }]
         ),
-        safeSheetName('Notes', year)
-      );
+      });
     }
 
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
+    sheets.push({
+      sheet: safeSheetName('Caisse', year),
+      data: recordsToSheetData(
         paymentRows.length > 0
           ? paymentRows
           : [{ 'Année Académique': year, Information: 'Aucun encaissement enregistré' }]
       ),
-      safeSheetName('Caisse', year)
-    );
+    });
   });
 
   // 3. Maquette LMD reference sheet
@@ -573,7 +690,12 @@ export function exportCerecToExcel(
       Enseignant: ens?.nom ?? 'Non affecté',
     };
   });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ueRows), 'Maquette_LMD');
+  sheets.push({
+    sheet: 'Maquette_LMD',
+    data: recordsToSheetData(
+      ueRows.length > 0 ? ueRows : [{ Information: 'Aucune UE enregistrée' }]
+    ),
+  });
 
   const dateTag = new Date().toISOString().slice(0, 10);
   const fileName =
@@ -583,7 +705,7 @@ export function exportCerecToExcel(
       ? `CEREC-ISCOM_Archive_${options.targetYear}_${dateTag}.xlsx`
       : `CEREC-ISCOM_Export_Par_Annee_${dateTag}.xlsx`;
 
-  XLSX.writeFile(wb, fileName);
+  void writeXlsxFile(sheets).toFile(fileName);
 }
 
 export interface ArchiveImportResult {
@@ -614,7 +736,7 @@ function pickField(row: Record<string, unknown>, candidates: string[]): string {
     const target = normalizeHeaderKey(cand);
     const match = normalizedEntries.find(([k]) => k === target);
     if (match && match[1] !== undefined && match[1] !== null) {
-      const str = String(match[1]).trim();
+      const str = sanitizeImportedCell(match[1]);
       if (str !== '' && str !== '—') return str;
     }
   }
@@ -681,8 +803,7 @@ export async function importArchivesFromFile(
   file: File,
   currentState: CerecState
 ): Promise<ArchiveImportResult> {
-  const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer, { type: 'array' });
+  const sheets = await readSpreadsheetSheets(file);
 
   const nextFilieres = currentState.filieres.map((f) => ({
     ...f,
@@ -709,10 +830,10 @@ export async function importArchivesFromFile(
   };
 
   // Pass 1: Maquette UEs
-  wb.SheetNames.forEach((sheetName) => {
+  sheets.forEach(({ name: sheetName, matrix }) => {
     const normName = normalizeHeaderKey(sheetName);
     if (!normName.includes('maquette') && !normName.includes('ue')) return;
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[sheetName]);
+    const rows = matrixToObjectRows(matrix);
     rows.forEach((row, idx) => {
       const code = pickField(row, ['Code', 'Code UE']).toUpperCase();
       const intitule = pickField(row, ['Élément constitutif', 'Element constitutif', 'Intitulé', 'Matière']);
@@ -742,11 +863,11 @@ export async function importArchivesFromFile(
   });
 
   // Pass 2: Students sheets
-  wb.SheetNames.forEach((sheetName) => {
+  sheets.forEach(({ name: sheetName, matrix }) => {
     const normName = normalizeHeaderKey(sheetName);
     if (!normName.startsWith('etud')) return;
     const sheetYear = extractYearFromSheetName(sheetName);
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[sheetName]);
+    const rows = matrixToObjectRows(matrix);
 
     rows.forEach((row, idx) => {
       const matricule = pickField(row, ['Matricule']);
@@ -828,11 +949,11 @@ export async function importArchivesFromFile(
   };
 
   // Pass 3: Grades sheets
-  wb.SheetNames.forEach((sheetName) => {
+  sheets.forEach(({ name: sheetName, matrix }) => {
     const normName = normalizeHeaderKey(sheetName);
     if (!normName.startsWith('notes')) return;
     const sheetYear = extractYearFromSheetName(sheetName);
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[sheetName]);
+    const rows = matrixToObjectRows(matrix);
 
     rows.forEach((row) => {
       const matricule = pickField(row, ['Matricule']);
@@ -877,11 +998,11 @@ export async function importArchivesFromFile(
   });
 
   // Pass 4: Caisse / Payments sheets
-  wb.SheetNames.forEach((sheetName) => {
+  sheets.forEach(({ name: sheetName, matrix }) => {
     const normName = normalizeHeaderKey(sheetName);
     if (!normName.startsWith('caisse') && !normName.includes('paiement')) return;
     const sheetYear = extractYearFromSheetName(sheetName);
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[sheetName]);
+    const rows = matrixToObjectRows(matrix);
 
     rows.forEach((row, idx) => {
       const numeroRecu = pickField(row, ['N° Reçu', 'No Recu', 'Numero Recu', 'Recu']);
@@ -1129,7 +1250,6 @@ export function exportGradesTemplateToExcel(
   ue: UE,
   students: Student[]
 ) {
-  const wb = XLSX.utils.book_new();
   const rows = students.map((s) => {
     const grade = state.grades.find((g) => g.studentId === s.id && g.ueId === ue.id);
     return {
@@ -1148,12 +1268,12 @@ export function exportGradesTemplateToExcel(
     };
   });
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb, ws, safeSheetName('Notes', ue.code));
-  XLSX.writeFile(
-    wb,
-    `CEREC-ISCOM_Releve_${ue.code}_${state.settings.anneeAcademique}.xlsx`
+  const sheetData = recordsToSheetData(
+    rows.length > 0 ? rows : [{ Information: 'Aucun étudiant inscrit dans cette UE' }]
   );
+  void writeXlsxFile(sheetData, {
+    sheet: safeSheetName('Notes', ue.code),
+  }).toFile(`CEREC-ISCOM_Releve_${ue.code}_${state.settings.anneeAcademique}.xlsx`);
 }
 
 export interface GradeImportPreviewRow {
@@ -1185,8 +1305,7 @@ export async function importGradesFromFile(
   state: CerecState,
   fallbackUeId?: string
 ): Promise<GradeImportResult> {
-  const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer, { type: 'array' });
+  const sheets = await readSpreadsheetSheets(file);
 
   const mergedByKey = new Map<string, GradeRecord>();
   const previewByKey = new Map<string, GradeImportPreviewRow>();
@@ -1244,7 +1363,7 @@ export async function importGradesFromFile(
     return undefined;
   };
 
-  wb.SheetNames.forEach((sheetName) => {
+  sheets.forEach(({ name: sheetName, matrix }) => {
     const normSheet = normalizeHeaderKey(sheetName);
     if (
       normSheet.startsWith('synthese') ||
@@ -1255,10 +1374,6 @@ export async function importGradesFromFile(
       return;
     }
 
-    const matrix = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[sheetName], {
-      header: 1,
-      defval: '',
-    });
     if (matrix.length === 0) return;
 
     // Detect optional single-student matricule in top banner cells (e.g. student transcript file)

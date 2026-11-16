@@ -220,7 +220,7 @@ export function ExamsView({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx,.csv"
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   e.target.value = '';

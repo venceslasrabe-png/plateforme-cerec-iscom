@@ -9,7 +9,7 @@ import {
 import React, { useState } from 'react';
 import { CEREC_LOGO_URL } from '../data/seedData';
 import { Campus, UserRole } from '../types/cerec';
-import { authenticateCompartment } from '../utils/permissions';
+import { sanitizeText } from '../utils/security';
 
 export interface AuthSession {
   email: string;
@@ -22,7 +22,7 @@ export interface AuthSession {
 
 interface LoginPageProps {
   activeAcademicYear: string;
-  onLogin: (session: AuthSession) => void;
+  onLogin: (session: AuthSession, csrfToken: string) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
@@ -34,11 +34,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [remember, setRemember] = useState<boolean>(true);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showHelpNotice, setShowHelpNotice] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanEmail = email.trim();
+    if (submitting) return;
+    const cleanEmail = sanitizeText(email, 180).toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       setError(
         'Veuillez saisir une adresse mail valide (ex. dg@cerec-iscom.cg).'
@@ -50,21 +52,37 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
-    const auth = authenticateCompartment(cleanEmail, password);
-    if (!auth.ok) {
-      setError(auth.error);
-      return;
-    }
-
+    setSubmitting(true);
     setError(null);
-    onLogin({
-      email: auth.account.email,
-      displayName: auth.account.displayName,
-      role: auth.account.role,
-      campus: auth.account.campus,
-      remember,
-      loggedInAt: new Date().toISOString(),
-    });
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password,
+          remember,
+        }),
+      });
+      const data = (await res.json()) as {
+        session?: AuthSession;
+        csrfToken?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.session || !data.csrfToken) {
+        setError(data.error ?? 'Échec de l’authentification.');
+        return;
+      }
+      setPassword('');
+      onLogin(data.session, data.csrfToken);
+    } catch {
+      setError(
+        'Serveur d’authentification inaccessible. Vérifiez votre connexion et réessayez.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -243,10 +261,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
             <button
               type="submit"
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] text-[#07142b] text-sm font-bold transition-colors shadow-sm cursor-pointer"
+              disabled={submitting}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#e0a526] hover:bg-[#c58b12] disabled:opacity-60 text-[#07142b] text-sm font-bold transition-colors shadow-sm cursor-pointer"
             >
               <LogIn className="w-4 h-4" />
-              Se connecter
+              {submitting ? 'Vérification sécurisée…' : 'Se connecter'}
             </button>
           </div>
         </form>

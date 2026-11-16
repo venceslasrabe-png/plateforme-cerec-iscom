@@ -148,7 +148,7 @@ export function GradesView({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx,.csv"
                 onChange={handleImportFile}
                 className="hidden"
                 aria-label="Importer un relevé de notes Excel ou CSV"

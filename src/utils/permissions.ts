@@ -28,20 +28,18 @@ export interface RoleDefinition {
   shortLabel: string;
   mission: string;
   defaultEmail: string;
-  defaultPassword: string;
   defaultCampus: Campus | 'Tous';
   assignedMissionService?: string;
   allowedModules: ModuleId[];
   permissions: RolePermissions;
 }
 
-export interface CompartmentAccount {
+export interface CompartmentAccountInfo {
   id: string;
   compartment: string;
   role: UserRole;
   campus: Campus | 'Tous';
   email: string;
-  password: string;
   displayName: string;
   scopeSummary: string;
 }
@@ -54,7 +52,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     mission:
       'Supervision globale en lecture seule sur toute la plateforme (Pointe-Noire & Brazzaville), sans aucune modification.',
     defaultEmail: 'dg@cerec-iscom.cg',
-    defaultPassword: 'DG@Cerec2026!',
     defaultCampus: 'Tous',
     allowedModules: [
       'dash',
@@ -98,7 +95,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     mission:
       'Administration complète : gestion système, exercices académiques, seuils LMD et droits sur tous les services.',
     defaultEmail: 'admin@cerec-iscom.cg',
-    defaultPassword: 'Admin@Cerec2026!',
     defaultCampus: 'Tous',
     allowedModules: [
       'dash',
@@ -142,7 +138,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     mission:
       'Maquettes LMD, emplois du temps, trimestres, corps professoral, délibérations, jurys et notes de service.',
     defaultEmail: 'direction@cerec-iscom.cg',
-    defaultPassword: 'DirAcad@2026!',
     defaultCampus: 'Tous',
     assignedMissionService: 'Direction Académique',
     allowedModules: ['dash', 'etu', 'aca', 'pres', 'notes', 'exam', 'ens', 'com'],
@@ -175,7 +170,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     mission:
       'Inscriptions, dossiers étudiants, cartes PVC, emplois du temps, feuilles de présences, relevés et PV.',
     defaultEmail: 'scolarite@cerec-iscom.cg',
-    defaultPassword: 'Scol@PN2026!',
     defaultCampus: 'Pointe-Noire',
     assignedMissionService: 'Service Scolarité & Examens',
     allowedModules: ['dash', 'etu', 'aca', 'pres', 'notes', 'exam', 'com'],
@@ -208,7 +202,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     mission:
       'Encaissements FCFA, reçus officiels, suivi des tranches de scolarité, recouvrement et relances tuteurs.',
     defaultEmail: 'caisse@cerec-iscom.cg',
-    defaultPassword: 'Caisse@PN2026!',
     defaultCampus: 'Pointe-Noire',
     assignedMissionService: 'Caisse & Comptabilité',
     allowedModules: ['dash', 'etu', 'fin', 'com'],
@@ -241,7 +234,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     mission:
       'Consultation des maquettes et emplois du temps, appel numérique en salle et saisie des notes CC/Examen.',
     defaultEmail: 'enseignant@cerec-iscom.cg',
-    defaultPassword: 'Prof@Cerec2026!',
     defaultCampus: 'Tous',
     allowedModules: ['dash', 'aca', 'pres', 'notes', 'com'],
     permissions: {
@@ -273,7 +265,6 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleDefinition> = {
     mission:
       'Contrôle des badges QR au portail, registre des visiteurs, pointage des présences et vérification des dossiers.',
     defaultEmail: 'guerite@cerec-iscom.cg',
-    defaultPassword: 'Guerite@PN2026!',
     defaultCampus: 'Pointe-Noire',
     assignedMissionService: 'Surveillance & Guérite',
     allowedModules: ['dash', 'surv', 'pres', 'etu', 'com'],
@@ -311,14 +302,13 @@ export const ORDERED_ROLES: RoleDefinition[] = [
   ROLE_DEFINITIONS.surveillance,
 ];
 
-export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
+export const COMPARTMENT_ACCOUNTS: CompartmentAccountInfo[] = [
   {
     id: 'acc-dg',
     compartment: 'Direction Générale (Supervision)',
     role: 'dg',
     campus: 'Tous',
     email: ROLE_DEFINITIONS.dg.defaultEmail,
-    password: ROLE_DEFINITIONS.dg.defaultPassword,
     displayName: 'Directeur Général',
     scopeSummary: '11 rubriques en lecture seule · Notifications globales',
   },
@@ -328,7 +318,6 @@ export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
     role: 'admin',
     campus: 'Tous',
     email: ROLE_DEFINITIONS.admin.defaultEmail,
-    password: ROLE_DEFINITIONS.admin.defaultPassword,
     displayName: 'Administrateur Général',
     scopeSummary: 'Accès total (11 rubriques) · Configuration LMD & Rôles',
   },
@@ -338,7 +327,6 @@ export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
     role: 'direction',
     campus: 'Tous',
     email: ROLE_DEFINITIONS.direction.defaultEmail,
-    password: ROLE_DEFINITIONS.direction.defaultPassword,
     displayName: 'Direction Académique',
     scopeSummary: 'Maquettes LMD, Planning, Trimestres, Notes, Jurys, Enseignants',
   },
@@ -348,7 +336,6 @@ export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
     role: 'scolarite',
     campus: 'Pointe-Noire',
     email: ROLE_DEFINITIONS.scolarite.defaultEmail,
-    password: ROLE_DEFINITIONS.scolarite.defaultPassword,
     displayName: 'Scolarité Pointe-Noire',
     scopeSummary: 'Inscriptions, Reçus PDF, Cartes PVC, Présences, Relevés, PV',
   },
@@ -358,7 +345,6 @@ export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
     role: 'scolarite',
     campus: 'Brazzaville',
     email: 'scolarite.bz@cerec-iscom.cg',
-    password: 'Scol@BZ2026!',
     displayName: 'Scolarité Brazzaville',
     scopeSummary: 'Inscriptions, Reçus PDF, Cartes PVC, Présences, Relevés, PV',
   },
@@ -368,7 +354,6 @@ export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
     role: 'caisse',
     campus: 'Pointe-Noire',
     email: ROLE_DEFINITIONS.caisse.defaultEmail,
-    password: ROLE_DEFINITIONS.caisse.defaultPassword,
     displayName: 'Caisse Pointe-Noire',
     scopeSummary: 'Encaissements FCFA, Reçus PDF, Recouvrement, Notifications',
   },
@@ -378,7 +363,6 @@ export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
     role: 'caisse',
     campus: 'Brazzaville',
     email: 'caisse.bz@cerec-iscom.cg',
-    password: 'Caisse@BZ2026!',
     displayName: 'Caisse Brazzaville',
     scopeSummary: 'Encaissements FCFA, Reçus PDF, Recouvrement, Notifications',
   },
@@ -388,7 +372,6 @@ export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
     role: 'enseignant',
     campus: 'Tous',
     email: ROLE_DEFINITIONS.enseignant.defaultEmail,
-    password: ROLE_DEFINITIONS.enseignant.defaultPassword,
     displayName: 'Corps Enseignant',
     scopeSummary: 'Emploi du temps, Appel numérique, Saisie des notes CC/Examen',
   },
@@ -398,7 +381,6 @@ export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
     role: 'surveillance',
     campus: 'Pointe-Noire',
     email: ROLE_DEFINITIONS.surveillance.defaultEmail,
-    password: ROLE_DEFINITIONS.surveillance.defaultPassword,
     displayName: 'Guérite Pointe-Noire',
     scopeSummary: 'Contrôle QR portail, Visiteurs, Présences, Dossiers',
   },
@@ -408,44 +390,10 @@ export const COMPARTMENT_ACCOUNTS: CompartmentAccount[] = [
     role: 'surveillance',
     campus: 'Brazzaville',
     email: 'guerite.bz@cerec-iscom.cg',
-    password: 'Guerite@BZ2026!',
     displayName: 'Guérite Brazzaville',
     scopeSummary: 'Contrôle QR portail, Visiteurs, Présences, Dossiers',
   },
 ];
-
-export type CompartmentAuthResult =
-  | { ok: true; account: CompartmentAccount }
-  | { ok: false; error: string };
-
-export function authenticateCompartment(
-  email: string,
-  password: string
-): CompartmentAuthResult {
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanPassword = password.trim();
-
-  const account = COMPARTMENT_ACCOUNTS.find(
-    (acc) => acc.email.toLowerCase() === cleanEmail
-  );
-
-  if (!account) {
-    return {
-      ok: false,
-      error:
-        'Adresse mail non reconnue. Veuillez saisir l’adresse officielle d’un compartiment CEREC-ISCOM.',
-    };
-  }
-
-  if (account.password !== cleanPassword) {
-    return {
-      ok: false,
-      error: 'Mot de passe incorrect pour ce compartiment.',
-    };
-  }
-
-  return { ok: true, account };
-}
 
 export function getRoleDefinition(role: UserRole): RoleDefinition {
   return ROLE_DEFINITIONS[role] ?? ROLE_DEFINITIONS.admin;
