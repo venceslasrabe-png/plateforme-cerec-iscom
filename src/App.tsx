@@ -60,6 +60,9 @@ import {
   exportCerecToExcel,
   formatFCFA,
   getAvailableAcademicYears,
+  getFrenchWeekday,
+  getLocalDateISO,
+  getLocalTimeHHMM,
 } from './utils/lmd';
 import {
   canAccessModule,
@@ -720,33 +723,69 @@ export default function App() {
 
   const handleAddGateLog = (log: GateLog) => {
     if (!guardWrite(perms.canOperateGate)) return;
-    setState((prev) => ({ ...prev, gateLogs: [log, ...prev.gateLogs] }));
+    const operator = authSession?.displayName ?? roleDef.label;
+    const dateVal = log.date || getLocalDateISO();
+    const enriched: GateLog = {
+      ...log,
+      date: dateVal,
+      jour: log.jour || getFrenchWeekday(dateVal),
+      pointeurEntree:
+        log.heureEntree && log.heureEntree !== '—'
+          ? log.pointeurEntree || operator
+          : undefined,
+      pointeurSortie: log.heureSortie
+        ? log.pointeurSortie || operator
+        : undefined,
+    };
+    setState((prev) => ({ ...prev, gateLogs: [enriched, ...prev.gateLogs] }));
   };
 
   const handleMarkExit = (id: string) => {
     if (!guardWrite(perms.canOperateGate)) return;
-    const now = new Date().toTimeString().slice(0, 5);
+    const nowObj = new Date();
+    const nowTime = getLocalTimeHHMM(nowObj);
+    const nowDate = getLocalDateISO(nowObj);
+    const nowDay = getFrenchWeekday(nowDate);
+    const operator = authSession?.displayName ?? roleDef.label;
     setState((prev) => ({
       ...prev,
       gateLogs: prev.gateLogs.map((g) =>
-        g.id === id ? { ...g, heureSortie: now } : g
+        g.id === id
+          ? {
+              ...g,
+              heureSortie: nowTime,
+              dateSortie: nowDate,
+              jourSortie: nowDay,
+              pointeurSortie: operator,
+            }
+          : g
       ),
     }));
-    notify(`Sortie enregistrée à ${now}.`);
+    notify(`Sortie enregistrée (${nowDay} ${nowDate} à ${nowTime}).`);
   };
 
   const handleCloseAllGateLogs = (campus: Campus | 'Tous') => {
     if (!guardWrite(perms.canOperateGate)) return;
-    const now = new Date().toTimeString().slice(0, 5);
+    const nowObj = new Date();
+    const nowTime = getLocalTimeHHMM(nowObj);
+    const nowDate = getLocalDateISO(nowObj);
+    const nowDay = getFrenchWeekday(nowDate);
+    const operator = authSession?.displayName ?? roleDef.label;
     setState((prev) => ({
       ...prev,
       gateLogs: prev.gateLogs.map((g) =>
         !g.heureSortie && (campus === 'Tous' || g.campus === campus)
-          ? { ...g, heureSortie: now }
+          ? {
+              ...g,
+              heureSortie: nowTime,
+              dateSortie: nowDate,
+              jourSortie: nowDay,
+              pointeurSortie: operator,
+            }
           : g
       ),
     }));
-    notify(`Toutes les sorties ouvertes pointées à ${now}.`);
+    notify(`Toutes les sorties ouvertes pointées (${nowDay} ${nowDate} à ${nowTime}).`);
   };
 
   const handleDeleteGateLog = (id: string) => {
@@ -1492,6 +1531,7 @@ export default function App() {
               state={state}
               campusFilter={campusFilter}
               canOperateGate={perms.canOperateGate}
+              operatorName={authSession?.displayName ?? roleDef.label}
               onAddGateLog={handleAddGateLog}
               onMarkExit={handleMarkExit}
               onCloseAllGateLogs={() => handleCloseAllGateLogs(campusFilter)}

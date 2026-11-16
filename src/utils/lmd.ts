@@ -1522,3 +1522,40 @@ export function createTrimesterBatchForYear(
     }));
 }
 
+export function getLocalDateISO(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function getLocalTimeHHMM(now: Date = new Date()): string {
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+export function getFrenchWeekday(dateStr: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  const dateObj = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(dateStr);
+  if (Number.isNaN(dateObj.getTime())) return '—';
+  const days = [
+    'Dimanche',
+    'Lundi',
+    'Mardi',
+    'Mercredi',
+    'Jeudi',
+    'Vendredi',
+    'Samedi',
+  ];
+  return days[dateObj.getDay()] ?? '—';
+}
+
+export function formatFrenchDate(dateStr: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  if (!match) return dateStr || '—';
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+

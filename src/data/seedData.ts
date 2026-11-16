@@ -844,10 +844,10 @@ export function createInitialSeedData(): CerecState {
       { id: 'sch-8', campus: 'Brazzaville', filiereCode: 'COM', option: 'Commerce International', niveau: 'L1', jour: 'Mercredi', heureDebut: '08:00', heureFin: '10:30', ueId: 'ue-com-1', salle: 'Salle P02 — Brazzaville' },
     ],
     gateLogs: [
-      { id: 'gt-1', campus: 'Pointe-Noire', typePersonne: 'Étudiant', studentId: 'st-1', nomComplet: 'MBOUNGOU Précieux', reference: 'ISCOM-PN-26-001', motif: 'Cours GCF101', heureEntree: '07:48', statutAcces: 'Autorisé', date: '2026-11-12' },
-      { id: 'gt-2', campus: 'Pointe-Noire', typePersonne: 'Étudiant', studentId: 'st-4', nomComplet: 'PEMBA Chancelvie', reference: 'ISCOM-PN-26-004', motif: 'Cours LOG201', heureEntree: '08:16', statutAcces: 'Alerte Scolarité', date: '2026-11-12' },
-      { id: 'gt-3', campus: 'Pointe-Noire', typePersonne: 'Étudiant', studentId: 'st-3', nomComplet: 'TCHICAYA Arnaud', reference: 'ISCOM-PN-26-003', motif: 'Cours LOG201', heureEntree: '07:54', heureSortie: '12:15', statutAcces: 'Autorisé', date: '2026-11-12' },
-      { id: 'gt-4', campus: 'Brazzaville', typePersonne: 'Visiteur', nomComplet: 'M. Alain Koumba (ESTAM)', reference: 'CNI-CG-998120', motif: 'Réunion partenariat pédagogique', heureEntree: '09:30', statutAcces: 'Autorisé', date: '2026-11-12' },
+      { id: 'gt-1', campus: 'Pointe-Noire', typePersonne: 'Étudiant', studentId: 'st-1', nomComplet: 'MBOUNGOU Précieux', reference: 'ISCOM-PN-26-001', motif: 'Cours GCF101', heureEntree: '07:48', statutAcces: 'Autorisé', date: '2026-11-12', jour: 'Jeudi', pointeurEntree: 'Guérite Pointe-Noire' },
+      { id: 'gt-2', campus: 'Pointe-Noire', typePersonne: 'Étudiant', studentId: 'st-4', nomComplet: 'PEMBA Chancelvie', reference: 'ISCOM-PN-26-004', motif: 'Cours LOG201', heureEntree: '08:16', statutAcces: 'Alerte Scolarité', date: '2026-11-12', jour: 'Jeudi', pointeurEntree: 'Guérite Pointe-Noire' },
+      { id: 'gt-3', campus: 'Pointe-Noire', typePersonne: 'Étudiant', studentId: 'st-3', nomComplet: 'TCHICAYA Arnaud', reference: 'ISCOM-PN-26-003', motif: 'Cours LOG201', heureEntree: '07:54', heureSortie: '12:15', statutAcces: 'Autorisé', date: '2026-11-12', jour: 'Jeudi', dateSortie: '2026-11-12', jourSortie: 'Jeudi', pointeurEntree: 'Guérite Pointe-Noire', pointeurSortie: 'Guérite Pointe-Noire' },
+      { id: 'gt-4', campus: 'Brazzaville', typePersonne: 'Visiteur', nomComplet: 'M. Alain Koumba (ESTAM)', reference: 'CNI-CG-998120', motif: 'Réunion partenariat pédagogique', heureEntree: '09:30', statutAcces: 'Autorisé', date: '2026-11-12', jour: 'Jeudi', pointeurEntree: 'Guérite Brazzaville' },
     ],
     announcements: [
       {

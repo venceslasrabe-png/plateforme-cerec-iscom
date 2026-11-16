@@ -169,6 +169,11 @@ export interface GateLog {
   heureSortie?: string;
   statutAcces: 'Autorisé' | 'Alerte Scolarité' | 'Refusé';
   date: string;
+  jour?: string;
+  dateSortie?: string;
+  jourSortie?: string;
+  pointeurEntree?: string;
+  pointeurSortie?: string;
   anneeAcademique?: string;
 }
 
