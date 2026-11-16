@@ -126,6 +126,8 @@ export async function createApp(options?: {
             'https://*.googleusercontent.com',
           ],
           connectSrc: ["'self'"],
+          workerSrc: ["'self'"],
+          manifestSrc: ["'self'"],
           objectSrc: ["'none'"],
           baseUri: ["'self'"],
           formAction: ["'self'"],

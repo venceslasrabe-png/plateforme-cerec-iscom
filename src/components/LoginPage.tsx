@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { CEREC_LOGO_URL } from '../data/seedData';
 import { Campus, UserRole } from '../types/cerec';
 import { sanitizeText } from '../utils/security';
+import { OfflineIndicator, PWAInstallButton } from './PWAInstallButton';
 
 export interface AuthSession {
   email: string;
@@ -267,9 +268,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <LogIn className="w-4 h-4" />
               {submitting ? 'Vérification sécurisée…' : 'Se connecter'}
             </button>
+
+            <div className="pt-2 border-t border-[#e3e7ef] flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] text-slate-500">
+                Application Android / Mobile disponible
+              </span>
+              <PWAInstallButton compact />
+            </div>
           </div>
         </form>
       </div>
+      <OfflineIndicator />
     </div>
   );
 };

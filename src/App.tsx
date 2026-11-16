@@ -23,6 +23,7 @@ import { CreateAcademicYearModal } from './components/CreateAcademicYearModal';
 import { CreateTrimesterModal } from './components/CreateTrimesterModal';
 import { AuthSession, LoginPage } from './components/LoginPage';
 import { NotificationCenter } from './components/NotificationCenter';
+import { OfflineIndicator, PWAInstallButton } from './components/PWAInstallButton';
 import { AcademicView } from './components/modules/AcademicView';
 import { AttendanceView } from './components/modules/AttendanceView';
 import { CommunicationView } from './components/modules/CommunicationView';
@@ -1346,6 +1347,7 @@ export default function App() {
                 onNavigate={navigateTo}
               />
               <div className="hidden md:flex items-center gap-2 shrink-0">
+              <PWAInstallButton compact onNotify={notify} />
               {perms.canManageAcademicCalendar ? (
                 <select
                   value={state.settings.anneeAcademique}
@@ -1534,6 +1536,7 @@ export default function App() {
               >
                 <Download className="w-3.5 h-3.5 text-[#eab33a]" />
               </button>
+              <PWAInstallButton compact onNotify={notify} />
             </div>
           </div>
         </header>
@@ -1783,6 +1786,8 @@ export default function App() {
           {toast}
         </div>
       )}
+
+      <OfflineIndicator />
     </div>
   );
 }
